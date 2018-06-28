@@ -1,0 +1,12 @@
+__pycache__
+.vscode
+.idea
+*.config
+
+bin
+dist
+build
+*.egg-info
+*.pyc
+
+

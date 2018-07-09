@@ -16,6 +16,8 @@ import time
 import binascii
 import re
 from collections import deque
+import pyqtgraph as pg
+import numpy as np
 try:
   import cPickle as pickle
 except ImportError:
@@ -45,6 +47,8 @@ class MainWindow(QMainWindow):
     timmer = QTimer()
     feedFlag = True
     fileCache = None
+    img = None
+    CHANNELCOUNT = 24
 
     def __init__(self, app):
         super().__init__()
@@ -72,37 +76,46 @@ class MainWindow(QMainWindow):
     def initWindow(self):
         QToolTip.setFont(QFont('SansSerif', 10))
         # main layout
-        frameWidget = QWidget()
         mainWidget = QSplitter(Qt.Horizontal)
 
+        frameWidget = QWidget()
         frameLayout = QVBoxLayout() # 整体垂直布局，包括menu和main
+
+        configWidget = QWidget()
+        configLayout = QVBoxLayout()
+        configWidget.setLayout(configLayout)
 
         self.settingWidget = QWidget()
         self.settingWidget.setProperty("class","settingWidget")
-        self.settingWidget.setFixedWidth(160)
 
-        self.receiveSendWidget = QSplitter(Qt.Vertical)
+        # self.receiveSendWidget = QSplitter(Qt.Vertical)
+        self.receiveSendWidget = QWidget()
+
         self.functionalWiget = QWidget()
-        self.functionalWiget.setFixedWidth(80)
         settingLayout = QVBoxLayout()
         sendReceiveLayout = QVBoxLayout()
-        sendFunctionalLayout = QVBoxLayout()
+        sendFunctionalLayout = QGridLayout()
         mainLayout = QHBoxLayout()
         self.settingWidget.setLayout(settingLayout)
         self.receiveSendWidget.setLayout(sendReceiveLayout)
         self.functionalWiget.setLayout(sendFunctionalLayout)
-        mainLayout.addWidget(self.settingWidget)
+
+        configLayout.addWidget(self.settingWidget)
+        configLayout.addWidget(self.functionalWiget)
+
         mainLayout.addWidget(self.receiveSendWidget)
-        mainLayout.addWidget(self.functionalWiget)
-        mainLayout.setStretch(0, 1)
-        mainLayout.setStretch(1, 8)
-        mainLayout.setStretch(2, 1)
+        # mainLayout.addWidget(self.settingWidget)
+        # mainLayout.addWidget(self.functionalWiget)
+        mainLayout.addWidget(configWidget)
+        mainLayout.setStretch(0, 7)
+        # mainLayout.setStretch(1, 1)
+        # mainLayout.setStretch(2, 1)
 
         menuLayout = QHBoxLayout()
 
         mainWidget.setLayout(mainLayout)
 
-        frameLayout.addLayout(menuLayout)
+        # frameLayout.addLayout(menuLayout)
         frameLayout.addWidget(mainWidget)
         frameWidget.setLayout(frameLayout)
         self.setCentralWidget(frameWidget)
@@ -148,12 +161,12 @@ class MainWindow(QMainWindow):
         # buttonLayout.addWidget(self.clearReceiveButtion)
         # buttonLayout.addStretch(1)
         # buttonLayout.addWidget(self.sendButtion)
-        self.chartTest = Chart()
+        self.chartTest = Chart(self.CHANNELCOUNT)
         self.chartTest.setTitle("实时压力值")
         self.chartTest.legend().show()
-        # self.chartTest.handleData(1, 5)
 
         self.chartView = QChartView(self.chartTest)
+        self.chartView.setStyleSheet("margin: 0px; border: 1px solid black;")
         # self.chartView.setRubberBand(QChartView.HorizontalRubberBand)
         # self.chartView.setRubberBand(QChartView.VerticalRubberBand)
         self.chartView.setRubberBand(QChartView.RectangleRubberBand)
@@ -162,12 +175,19 @@ class MainWindow(QMainWindow):
         # sendAreaWidgetsLayout.addWidget(self.sendArea)
         # sendAreaWidgetsLayout.addLayout(buttonLayout)
         sendReceiveLayout.addWidget(self.chartView)
+        pw = pg.PlotWidget(name='Plot1')
+        sendReceiveLayout.addWidget(pw)
+        self.img = pg.ImageItem()
+        pw.addItem(self.img)
+        # Generate image data
+        # self.imgData = np.full((8, 3, 3), [0, 255, 0])
+        # self.img.setImage(self.imgData)
         # sendReceiveLayout.addWidget(self.receiveArea)
         # sendReceiveLayout.addWidget(sendWidget)
         sendReceiveLayout.addWidget(btnWidget)
         # sendReceiveLayout.addWidget(self.sendHistory)
-        sendReceiveLayout.setStretch(0, 18)
-        sendReceiveLayout.setStretch(1, 1)
+        sendReceiveLayout.setStretch(0, 10)
+        sendReceiveLayout.setStretch(1, 5)
         sendReceiveLayout.setStretch(2, 1)
 
         # widgets serial settings
@@ -233,92 +253,24 @@ class MainWindow(QMainWindow):
         # right functional layout
         self.ChannelCheckBoxAll = QCheckBox("全选")
         self.ChannelCheckBoxAll.setChecked(True)
-        self.ChannelCheckBox1 = QCheckBox("CH01")
-        self.ChannelCheckBox1.setChecked(True)
-        self.ChannelCheckBox2 = QCheckBox("CH02")
-        self.ChannelCheckBox2.setChecked(True)
-        self.ChannelCheckBox3 = QCheckBox("CH03")
-        self.ChannelCheckBox3.setChecked(True)
-        self.ChannelCheckBox4 = QCheckBox("CH04")
-        self.ChannelCheckBox4.setChecked(True)
-        self.ChannelCheckBox5 = QCheckBox("CH05")
-        self.ChannelCheckBox5.setChecked(True)
-        self.ChannelCheckBox6 = QCheckBox("CH06")
-        self.ChannelCheckBox6.setChecked(True)
-        self.ChannelCheckBox7 = QCheckBox("CH07")
-        self.ChannelCheckBox7.setChecked(True)
-        self.ChannelCheckBox8 = QCheckBox("CH08")
-        self.ChannelCheckBox8.setChecked(True)
 
-        self.ChannelCheckBox9 = QCheckBox("CH09")
-        self.ChannelCheckBox9.setChecked(True)
-        self.ChannelCheckBox10 = QCheckBox("CH10")
-        self.ChannelCheckBox10.setChecked(True)
-        self.ChannelCheckBox11 = QCheckBox("CH11")
-        self.ChannelCheckBox11.setChecked(True)
-        self.ChannelCheckBox12 = QCheckBox("CH12")
-        self.ChannelCheckBox12.setChecked(True)
-        self.ChannelCheckBox13 = QCheckBox("CH13")
-        self.ChannelCheckBox13.setChecked(True)
-        self.ChannelCheckBox14 = QCheckBox("CH14")
-        self.ChannelCheckBox14.setChecked(True)
-        self.ChannelCheckBox15 = QCheckBox("CH15")
-        self.ChannelCheckBox15.setChecked(True)
-        self.ChannelCheckBox16 = QCheckBox("CH16")
-        self.ChannelCheckBox16.setChecked(True)
-
-        self.ChannelCheckBox17 = QCheckBox("CH17")
-        self.ChannelCheckBox17.setChecked(True)
-        self.ChannelCheckBox18 = QCheckBox("CH18")
-        self.ChannelCheckBox18.setChecked(True)
-        self.ChannelCheckBox19 = QCheckBox("CH19")
-        self.ChannelCheckBox19.setChecked(True)
-        self.ChannelCheckBox20 = QCheckBox("CH20")
-        self.ChannelCheckBox20.setChecked(True)
-        self.ChannelCheckBox21 = QCheckBox("CH21")
-        self.ChannelCheckBox21.setChecked(True)
-        self.ChannelCheckBox22 = QCheckBox("CH22")
-        self.ChannelCheckBox22.setChecked(True)
-        self.ChannelCheckBox23 = QCheckBox("CH23")
-        self.ChannelCheckBox23.setChecked(True)
-        self.ChannelCheckBox24 = QCheckBox("CH24")
-        self.ChannelCheckBox24.setChecked(True)
+        # create channel check box
+        for channelNum in range(self.CHANNELCOUNT):
+            self.__setattr__("ChannelCheckBox" + str(channelNum + 1), QCheckBox("CH" + str(channelNum + 1)))
+            self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(True)
 
         functionalGroupBox = QGroupBox(parameters.strFunctionalSend)
         # functionalGridLayout = QGridLayout()
         # functionalGridLayout.addWidget(self.testCheck, 0, 1)
         # functionalGroupBox.setLayout(functionalGridLayout)
-        checkBoxVerticalLayout = QVBoxLayout()
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBoxAll)
+        checkBoxVerticalLayout = QGridLayout()
+        checkBoxVerticalLayout.addWidget(self.ChannelCheckBoxAll, 0, 0)
 
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox1)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox2)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox3)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox4)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox5)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox6)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox7)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox8)
+        # add channel checkbox into widget
+        for channelNum in range(self.CHANNELCOUNT):
+            checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)), (channelNum/2+1), (channelNum)%2)
 
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox9)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox10)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox11)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox12)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox13)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox14)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox15)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox16)
-
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox17)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox18)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox19)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox20)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox21)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox22)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox23)
-        checkBoxVerticalLayout.addWidget(self.ChannelCheckBox24)
-
-        checkBoxVerticalLayout.addStretch(1)
+        # checkBoxVerticalLayout.addStretch(1)
         functionalGroupBox.setLayout(checkBoxVerticalLayout)
         sendFunctionalLayout.addWidget(functionalGroupBox)
 
@@ -360,18 +312,9 @@ class MainWindow(QMainWindow):
         # self.skinButton.clicked.connect(self.skinChange) # 换主题色
         # self.aboutButton.clicked.connect(self.showAbout) # 关于
 
-        # self.ChannelCheckBox1.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox2.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox3.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox4.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox5.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox6.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox7.stateChanged.connect(self.functionSetVisible)
-        # self.ChannelCheckBox8.stateChanged.connect(self.functionSetVisible)
-
         self.ChannelCheckBoxAll.stateChanged.connect(self.functionSetAllChannel)
 
-        for channelNum in range(24):
+        for channelNum in range(self.CHANNELCOUNT):
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).stateChanged.connect(self.functionSetVisible)
 
         self.functionalButton.clicked.connect(self.showHideFunctional)
@@ -527,9 +470,6 @@ class MainWindow(QMainWindow):
         self.receiveProgressStop = False
         while(not self.receiveProgressStop):
             try:
-                # length = self.com.in_waiting
-                # print('待读取数据: %s' % length)
-                # if length > 3*16 and self.feedFlag:
                 length = 3*16
                 bytes = self.com.read(length)
                 # print('length = %s, len(bytes)= %s' % (length, len(bytes)))
@@ -537,9 +477,6 @@ class MainWindow(QMainWindow):
                 strReceived = self.asciiB2HexString(bytes)
                 # print(strReceived)
                 self.receiveUpdateSignal.emit(strReceived) # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
-                # TODO 开另一个线程保存数据到临时文件
-                # self.cache_save(strReceived)
-                # QApplication.processEvents()
             except Exception as e:
                 print("receiveData error")
                 # if self.com.is_open and not self.serialPortCombobox.isEnabled():
@@ -548,58 +485,19 @@ class MainWindow(QMainWindow):
                 #     self.detectSerialPort()
                 print(e)
             # time.sleep(0.001) # 不注释会导致程序卡死
-
-        # 使用定时器来从串口读数据
-        # if self.uartReceiveTimer.isActive() == False:
-        #     self.uartReceiveTimer.setInterval(1)
-        #     self.uartReceiveTimer.start()
         return
-
-    # 废弃，尝试用定时器定期从串口读数据，此函数为timeout之后的执行函数
-    def onUartReceiveTimeOut(self):
-        print('onUart')
-        try:
-            length = self.com.in_waiting
-            # print('待读取数据: %s' % length)
-            if length > 0:
-                bytes = self.com.read(length)
-
-                self.receiveCount += len(bytes)
-
-                strReceived = self.asciiB2HexString(bytes)
-                # print(strReceived)
-                self.receiveUpdateSignal.emit(strReceived)  # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
-                # TODO 开另一个线程保存数据到临时文件
-        except Exception as e:
-            print("receiveData error")
-            if self.com.is_open and not self.serialPortCombobox.isEnabled():
-                self.openCloseSerial()
-                self.serialPortCombobox.clear()
-                self.detectSerialPort()
-            print(e)
 
     def updateReceivedDataDisplay(self, str):
         try:
-            if str != "":
-                # curScrollValue = self.receiveArea.verticalScrollBar().value()
-                # self.receiveArea.moveCursor(QTextCursor.End)
-                # endScrollValue = self.receiveArea.verticalScrollBar().value()
-                # 在textedit中显示，接收一会儿之后界面卡顿
-                # self.receiveArea.insertPlainText(str)
-
-                # self.receiveArea.append(str)
-
-                # theseus add in 2018.5.11
+            if str != "" and not None:
                 # 将数据缓存在list中
                 temp = str.split(' ')
                 temp.pop() # 去掉最后一个为空格的元素
                 self.dataCache.extend(temp)
-                # self.dataDeque.extend(temp)
                 # print('str = %s, after split str = %s' % (str, temp))
 
                 # 获取起始数据的偏移量
                 if self.offset is None:
-                    # self.dataCache.extend(temp)
                     for mIndex in range(48):
                         # print(mIndex)
                         tempList = self.dataCache[mIndex:9+mIndex:3]
@@ -610,66 +508,11 @@ class MainWindow(QMainWindow):
                             print(self.offset)
                             del self.dataCache[0:mIndex]
                             break
-                    # print(self.dataDeque)
-                    # for i in range(self.offset):
-                    #     self.dataDeque.popleft()
-                    # print('----')
-                    # print(self.dataDeque)
                 else:
-                    # startFlag = self.readCount
-                    # toShowData = self.dataCache[self.offset + startFlag * 3 : self.offset + (startFlag + 8) * 3 : 1]
-                    # print('len of toShowData = %s' % len(toShowData))
-                    # print('%s %d' % (toShowData[0], int(''.join(toShowData[1:3]), 16)))
-                    # self.receiveArea.append(' '.join(self.dataCache[self.offset+startFlag*3:self.offset+(startFlag+1)*3:1]))
-                    # self.chartTest.handleData(int(''.join(toShowData[1:3]), 16))
-
-                    # try:
-                    #     self.chartTest.handleData(int(toShowData[0], 16), int(''.join(toShowData[1:3]), 16))
-                    # except Exception as e:
-                    #     # print(toShowData)
-                    #     print("chart.handleData error: %s" % e)
-
-                    # self.readCount += 1
-
-                    # print(len(self.dataCache))
-                    # del self.dataCache[self.offset : self.offset+24]
-                    # print('- %s' % len(self.dataCache))
-
-                    # print(len(self.dataDeque))
-                    # for i in range(24):
-                    #     self.dataDeque.popleft()
-                    # print('- %s' % len(self.dataDeque))
-                    # self.dataCache.clear()
-                    # toShowData = []
-                    # for i in range(24):
-                    #     toShowData.append(self.dataDeque.popleft())
-
-                    # if (len(self.dataDeque) > (3 * 5 * 24)):
-                    #     toShowData = [[] for i in range(24)]
-                    #     for i in range(5 * 24):
-                    #         channelNumber = int(self.dataDeque.popleft(), 16)
-                    #         channelData = int(''.join([self.dataDeque.popleft(), self.dataDeque.popleft()]), 16)
-                    #         toShowData[channelNumber-1].append(channelData)
-                    #         # print('%s, %s' % (channelNumber, channelData))
-                    #         # print(toShowData)
-                    #     try:
-                    #         start = time.clock()
-                    #         # self.chartTest.handleData(toShowData)
-                    #         self.updateChartSignal.emit(toShowData)
-                    #         elapsed = (time.clock() - start)
-                    #         print("Time used: %.3fs" % elapsed)
-                    #     except Exception as e:
-                    #         print("chart.handleData error: %s" % e)
-                    # print(len(self.dataDeque))
-
                     if (self.timmer.isActive() == False):
                         self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
                         self.timmer.start()
                         # self.timmer.timeout.connect(self.onTimerOut)
-                # if curScrollValue < endScrollValue:
-                #     self.receiveArea.verticalScrollBar().setValue(curScrollValue)
-                # else:
-                #     self.receiveArea.moveCursor(QTextCursor.End)
         except Exception as e1:
             print("updateReceivedDataDisplay error: %s" % e1)
 
@@ -678,11 +521,11 @@ class MainWindow(QMainWindow):
 
     def onTimerOut(self):
         samples = 16 # 每次每个通道更新16个数据点，16 = 400/(1000/40)，其中400指每个通道收到数据点的速度是400pts（串口接收速率）
-        if (len(self.dataCache) > (3 * samples * 24)):
-            self.cache_save(' '.join(self.dataCache[0:3 * samples * 24])) # 缓存
+        if (len(self.dataCache) > (3 * samples * self.CHANNELCOUNT)):
+            self.cache_save(' '.join(self.dataCache[0:3 * samples * self.CHANNELCOUNT])) # 缓存
             QApplication.processEvents()
-            toShowData = [[] for i in range(24)]
-            for i in range(samples * 24):
+            toShowData = [[] for i in range(self.CHANNELCOUNT)]
+            for i in range(samples * self.CHANNELCOUNT):
                 channelNumber = int(self.dataCache[0], 16)
                 channelData = int(''.join(self.dataCache[1:3]), 16)
                 toShowData[channelNumber - 1].append(channelData)
@@ -692,14 +535,31 @@ class MainWindow(QMainWindow):
             try:
                 self.feedFlag = False
                 start = time.clock()
-                # self.chartTest.handleData(toShowData)
                 self.updateChartSignal.emit(toShowData)
+                tempA = np.array(toShowData)
+                tempB = tempA[:, 0] #(24,1)
+                tempC = np.zeros((self.CHANNELCOUNT, 3))
+                for i in range(self.CHANNELCOUNT):
+                    tempC[(i%8)*3+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], (tempB[i]-32300)/2048)
+                tempD = np.reshape(tempC, (8, 3, 3))
+                # test = self.blend_color([0, 255, 0], [255, 0, 0], 0.1)
+                #热力图显示 TODO 将压力值转换为颜色显示
+                # data = np.random.normal(size=(8, self.CHANNELCOUNT//8, 3))
+                self.img.setImage(tempD)
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
                 print("Time used: %.3fs" % elapsed)
             except Exception as e:
                 print("chart.handleData error: %s" % e)
             print(len(self.dataCache))
+
+    def blend_color(self, color1, color2, f):
+        [r1, g1, b1] = color1
+        [r2, g2, b2] = color2
+        r = r1 + (r2 - r1) * f
+        g = g1 + (g2 - g1) * f
+        b = b1 + (b2 - b1) * f
+        return [r, g, b]
 
     def onSendSettingsHexClicked(self):
         data = self.sendArea.toPlainText().replace("\n","\r\n")
@@ -899,12 +759,12 @@ class MainWindow(QMainWindow):
         return
 
     def functionSetAllChannel(self):
-        for channelNum in range(24):
+        for channelNum in range(self.CHANNELCOUNT):
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(self.ChannelCheckBoxAll.isChecked())
 
     def functionSetVisible(self):
         # self.chartTest.setVisibleFlag(1, self.__getattribute__('ChannelCheckBox1').isChecked())
-        for channelNum in range(24):
+        for channelNum in range(self.CHANNELCOUNT):
             self.chartTest.setVisibleFlag((channelNum + 1), self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).isChecked())
 
     def showHideSettings(self):
@@ -966,10 +826,6 @@ class MainWindow(QMainWindow):
                                 "</b><br><br>"+helpAbout.date+"<br><br>"+helpAbout.strAbout())
         return
 
-    def action1(self):
-        print("action1")
-        return
-
     def autoUpdateDetect(self):
         auto = autoUpdate.AutoUpdate()
         if auto.detectNewVersion():
@@ -980,7 +836,7 @@ class MainWindow(QMainWindow):
 
 class Chart(QChart):
 
-    def __init__(self):
+    def __init__(self, channelCount):
         super().__init__()
         self.m_series = 0
         # self.m_axis = QValueAxis()
@@ -989,6 +845,7 @@ class Chart(QChart):
         self.yMax = 32768 + 1000
         self.offset = 0
         self.channelNumber = 8
+        self.channelCount = channelCount
         self.channelColor = [
             Qt.red, Qt.yellow, Qt.green, Qt.blue, Qt.black, Qt.gray, Qt.magenta, Qt.cyan,
             Qt.darkRed, Qt.darkYellow, Qt.darkGreen, Qt.darkBlue, Qt.black, Qt.darkGray, Qt.darkMagenta, Qt.darkCyan,
@@ -1032,10 +889,10 @@ class Chart(QChart):
         # self.scatseries0.attachAxis(self.axisX)
         # self.scatseries0.attachAxis(self.axisY)
 
-        for num in range(len(self.channelColor)):
+        for num in range(self.channelCount):
             # print(num)
             # pen[num] = QPen(self.channelColor[num])
-            pen.append(QPen(self.channelColor[num]))
+            pen.append(QPen(QColor(random.random()*255, random.random()*255, random.random()*255,)))
             self.visibleFlag.append(True)
             # print(len(pen))
             pen[num].setWidth(1)
@@ -1054,7 +911,7 @@ class Chart(QChart):
         # self.axisY().setRange(self.yMin, self.yMax)
 
     def handleData(self, vals):
-        for num in range(24):
+        for num in range(self.channelCount):
             if self.offset < self.xMax or len(self.seriesList[num].pointsVector()) < self.xMax:
                 # self.seriesList[num].append(self.offset, val)
                 points = self.seriesList[num].pointsVector()
@@ -1083,7 +940,7 @@ class Chart(QChart):
         # self.yMax = 32768
         # self.xMax = 100
         # self.axisX.setRange(0, self.xMax)
-        for num in range(len(self.channelColor)):
+        for num in range(self.channelCount):
             self.seriesList[num].clear()
 
     def grabMouseEvent(self, *args, **kwargs):

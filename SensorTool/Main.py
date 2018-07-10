@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
     fileCache = None
     img = None
     CHANNELCOUNT = 24
+    dataMin = np.ones(CHANNELCOUNT)*33768
 
     def __init__(self, app):
         super().__init__()
@@ -528,7 +529,10 @@ class MainWindow(QMainWindow):
             for i in range(samples * self.CHANNELCOUNT):
                 channelNumber = int(self.dataCache[0], 16)
                 channelData = int(''.join(self.dataCache[1:3]), 16)
-                toShowData[channelNumber - 1].append(channelData)
+                # toShowData[channelNumber - 1].append(channelData)
+                if np.array(channelData).min() < self.dataMin[channelNumber - 1]:
+                    self.dataMin[channelNumber - 1] = np.array(channelData).min()
+                toShowData[channelNumber - 1].append(channelData - self.dataMin[channelNumber - 1])
                 # print('%s, %s' % (channelNumber, channelData))
                 # print(toShowData)
                 del self.dataCache[0:3]
@@ -540,8 +544,8 @@ class MainWindow(QMainWindow):
                 tempB = tempA[:, 0] #(24,1)
                 tempC = np.zeros((self.CHANNELCOUNT, 3))
                 for i in range(self.CHANNELCOUNT):
-                    tempC[(i%8)*3+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], (tempB[i]-32300)/2048)
-                tempD = np.reshape(tempC, (8, 3, 3))
+                    tempC[(i%8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1024)
+                tempD = np.reshape(tempC, (8, self.CHANNELCOUNT//8, 3))
                 # test = self.blend_color([0, 255, 0], [255, 0, 0], 0.1)
                 #热力图显示 TODO 将压力值转换为颜色显示
                 # data = np.random.normal(size=(8, self.CHANNELCOUNT//8, 3))
@@ -841,8 +845,8 @@ class Chart(QChart):
         self.m_series = 0
         # self.m_axis = QValueAxis()
         self.xMax = 400
-        self.yMin = 32768 - 500
-        self.yMax = 32768 + 1000
+        self.yMin = 0
+        self.yMax = 1536
         self.offset = 0
         self.channelNumber = 8
         self.channelCount = channelCount
@@ -932,7 +936,7 @@ class Chart(QChart):
                     points[len(points) - len(vals[num]) + i].setY(vals[num][i])
                 self.seriesList[num].replace(points)
                 # self.axisX.setRange(self.offset - self.xMax, self.offset)  # 修改x轴显示范围
-        self.offset += len(vals[num])
+        self.offset += len(vals[0])
 
     def handleClear(self):
         self.offset = 0

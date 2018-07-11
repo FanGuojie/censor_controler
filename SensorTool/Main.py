@@ -172,14 +172,26 @@ class MainWindow(QMainWindow):
         # self.chartView.setRubberBand(QChartView.VerticalRubberBand)
         self.chartView.setRubberBand(QChartView.RectangleRubberBand)
         self.chartView.setRenderHint(QPainter.Antialiasing)
-
         # sendAreaWidgetsLayout.addWidget(self.sendArea)
         # sendAreaWidgetsLayout.addLayout(buttonLayout)
-        sendReceiveLayout.addWidget(self.chartView)
-        pw = pg.PlotWidget(name='Plot1')
+        # sendReceiveLayout.addWidget(self.chartView) # TODO 取消注释
+
+        # 压力折线图
+        self.pw0 = pg.PlotWidget(name='Plot1')
+        # self.pw0.useOpenGL(True)
+        # self.pw0.addLegend()
+        # self.pw0.setYRange(0, 1536)
+        # self.pw0.setBackground('w')
+        sendReceiveLayout.addWidget(self.pw0)
+        self.initPlotChart()
+
+        # 压力热力图
+        pw = pg.PlotWidget(name='Plot2')
+        # pw.hideAxis('bottom')
         sendReceiveLayout.addWidget(pw)
         self.img = pg.ImageItem()
         pw.addItem(self.img)
+
         # Generate image data
         # self.imgData = np.full((8, 3, 3), [0, 255, 0])
         # self.img.setImage(self.imgData)
@@ -324,6 +336,26 @@ class MainWindow(QMainWindow):
         # self.uartReceiveTimer.timeout.connect(self.onUartReceiveTimeOut)
         self.timmer.timeout.connect(self.onTimerOut)
         return
+
+    def initPlotChart(self):
+        self.curves = []
+        # self.texts = []
+        for idx in range(self.CHANNELCOUNT):
+            curve = pg.PlotCurveItem(pen=(idx, self.CHANNELCOUNT), name=str(idx + 1))
+            self.pw0.addItem(curve)
+            curve.setPos(0, idx * 6)
+
+            # channel文字
+            # text = pg.TextItem(str(idx + 1))
+            # text.setPos(0, (idx+1) * 6)
+            # self.pw0.addItem(text)
+            # self.texts.append(text)
+
+            self.curves.append(curve)
+        data = np.random.normal(size=(self.CHANNELCOUNT, 400))  # TODO 删除
+        for i in range(self.CHANNELCOUNT):
+            temp = (i) % data.shape[0]
+            self.curves[i].setData(data[temp])
 
     def openCloseSerialProcess(self):
         try:
@@ -522,10 +554,14 @@ class MainWindow(QMainWindow):
 
     def onTimerOut(self):
         samples = 16 # 每次每个通道更新16个数据点，16 = 400/(1000/40)，其中400指每个通道收到数据点的速度是400pts（串口接收速率）
-        if (len(self.dataCache) > (3 * samples * self.CHANNELCOUNT)):
-            self.cache_save(' '.join(self.dataCache[0:3 * samples * self.CHANNELCOUNT])) # 缓存
+        if len(self.dataCache) > (3 * samples * self.CHANNELCOUNT):
+
+            self.cache_save(' '.join(self.dataCache[0:3 * samples * self.CHANNELCOUNT]))  # 缓存
+
             QApplication.processEvents()
+
             toShowData = [[] for i in range(self.CHANNELCOUNT)]
+
             for i in range(samples * self.CHANNELCOUNT):
                 channelNumber = int(self.dataCache[0], 16)
                 channelData = int(''.join(self.dataCache[1:3]), 16)
@@ -539,17 +575,18 @@ class MainWindow(QMainWindow):
             try:
                 self.feedFlag = False
                 start = time.clock()
-                self.updateChartSignal.emit(toShowData)
-                tempA = np.array(toShowData)
-                tempB = tempA[:, 0] #(24,1)
-                tempC = np.zeros((self.CHANNELCOUNT, 3))
+
+                self.updateChartSignal.emit(toShowData)  # 数据发送给折线图
+
+                tempA = np.array(toShowData)  # list 转 array
+                tempB = tempA[:, 0]  # 取array的第一列数据用于显示压力区域，该array维度为(24,1)
+                tempC = np.zeros((self.CHANNELCOUNT, 3))  # 创建临时array，维度(24, 3)
+                # 根据压力值计算颜色，然后将颜色数组[r, g, b]赋值给tempC
                 for i in range(self.CHANNELCOUNT):
-                    tempC[(i%8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1024)
-                tempD = np.reshape(tempC, (8, self.CHANNELCOUNT//8, 3))
-                # test = self.blend_color([0, 255, 0], [255, 0, 0], 0.1)
-                #热力图显示 TODO 将压力值转换为颜色显示
-                # data = np.random.normal(size=(8, self.CHANNELCOUNT//8, 3))
-                self.img.setImage(tempD)
+                    tempC[(i % 8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1024)
+                tempD = np.reshape(tempC, (8, self.CHANNELCOUNT//8, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
+                self.img.setImage(tempD)  # 更新压力热力图
+
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
                 print("Time used: %.3fs" % elapsed)

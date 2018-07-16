@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 24
+    CHANNELCOUNT = 32
     dataMin = np.ones(CHANNELCOUNT)*33768
 
     def __init__(self, app):
@@ -209,6 +209,7 @@ class MainWindow(QMainWindow):
         # self.serailBaudrateCombobox.addItem("57600")
         self.serailBaudrateCombobox.addItem("115200")
         self.serailBaudrateCombobox.addItem("230400")
+        self.serailBaudrateCombobox.addItem("460800")
         self.serailBaudrateCombobox.setCurrentIndex(1)
         self.serailBaudrateCombobox.setEditable(True)
         self.serailBytesCombobox = ComboBox()

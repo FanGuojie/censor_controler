@@ -6,7 +6,7 @@ from SensorTool.Combobox import ComboBox
 from PyQt5.QtCore import pyqtSignal, Qt, QTimer, QPoint, QMetaMethod
 from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton, QMessageBox, QDesktopWidget, QMainWindow,
                              QVBoxLayout, QHBoxLayout, QGridLayout, QTextEdit, QLabel, QRadioButton, QCheckBox,
-                             QLineEdit, QGroupBox, QSplitter, QFileDialog)
+                             QLineEdit, QGroupBox, QSplitter, QFileDialog, QProgressDialog)
 from PyQt5.QtGui import QIcon, QFont, QTextCursor, QPixmap, QPen, QPainter, QColor, QTextDocumentWriter
 import serial
 import serial.tools.list_ports
@@ -31,6 +31,8 @@ class MainWindow(QMainWindow):
     receiveUpdateSignal = pyqtSignal(str)
     updateChartSignal = pyqtSignal(list)
     cacheDataSignal = pyqtSignal(list)
+    updateDownloadSignal = pyqtSignal(int, int)
+    closeDownloadDialogSignal = pyqtSignal()
     errorSignal = pyqtSignal(str)
     isDetectSerialPort = False
     receiveCount = 0
@@ -51,6 +53,7 @@ class MainWindow(QMainWindow):
     TotalSamplesPerChannel = 800 # x轴范围最大值
     SamplesPerChannel = 16 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
+    selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
 
     def __init__(self, app):
         super().__init__()
@@ -279,6 +282,10 @@ class MainWindow(QMainWindow):
         self.statusBar().addWidget(self.statusBarReceiveCount,3)
         # self.statusBar()
 
+        # 保存文件进度对话框
+        # self.progressDialog = QProgressDialog(self)
+        # self.progressDialog.hide()
+
         self.resize(800, 500)
         self.MoveToCenter()
         self.setWindowTitle(parameters.appName+" V"+str(helpAbout.versionMajor)+"."+str(helpAbout.versionMinor))
@@ -314,10 +321,13 @@ class MainWindow(QMainWindow):
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).stateChanged.connect(self.functionSetVisible)
 
         self.functionalButton.clicked.connect(self.showHideFunctional)
-        self.saveReceiveButtion.clicked.connect(self.on_saveReceivedData)
+        self.saveReceiveButtion.clicked.connect(self.handleSave)
 
         # self.uartReceiveTimer.timeout.connect(self.onUartReceiveTimeOut)
         self.timmer.timeout.connect(self.onTimerOut)
+        # self.progressDialog.canceled.connect(self.cancelDownload) # TODO 取消保存
+        self.updateDownloadSignal.connect(self.updateDownloadProcess) # 更新保存文件进度
+        self.closeDownloadDialogSignal.connect(self.closeDownloadProcess) # 关闭保存文件对话框
         return
 
     # 数据模拟发生器
@@ -476,11 +486,12 @@ class MainWindow(QMainWindow):
             data = data.encode()
         return data
 
-    def on_saveReceivedData(self):
-        self.serialOpenCloseButton.click()
-        fileName, fileType = QFileDialog.getSaveFileName(
-            self, '保存数据', 'data', "文本文档(*.txt);;所有文件(*.*)")
-        print('Save file', fileName, fileType)
+    def on_saveReceivedData(self, fileName):
+        # self.serialOpenCloseButton.click()
+        # fileName, fileType = QFileDialog.getSaveFileName(
+        #     self, '保存数据', 'data', "文本文档(*.txt);;所有文件(*.*)")
+        # print('Save file', fileName, fileType)
+
         # writer = QTextDocumentWriter(fileName)
         # writer.write(self.receiveArea.document())
         # writer.write(self.fileCache.read())
@@ -488,21 +499,67 @@ class MainWindow(QMainWindow):
             f = open(fileName, 'w')
             self.fileCache = open('cache.txt', 'r')
             # QApplication.processEvents()
-            f.write(self.fileCache.read())
-            # TODO 根据已选择的通道保存数据到文件
+            # f.write(self.fileCache.read()) # 从缓存中读数据，写入导出文件中
+            # 根据已选择的通道保存数据到文件
+            while True:
+                seek = self.fileCache.tell()
+
+                self.updateDownloadSignal.emit(seek, os.path.getsize('cache.txt'))  # 更新进度
+
+                # 文件第一行写入Channel选择情况
+                if seek == 0:
+                    f.write(' '.join(str(int(flag)) for flag in self.selectedChannelFlag) + '\r\n')
+                line = self.fileCache.readline()
+                if not line:
+                    print('文件末尾了')
+                    self.closeDownloadDialogSignal.emit()  # 关闭下载对话框
+                    break
+                else:
+                    line = line[1:].split('\n')[0].split(' ')
+                    newLine = []
+                    # 根据通道勾选情况保存数据
+                    for i in range(self.CHANNELCOUNT):
+                        if self.selectedChannelFlag[i]:
+                            newLine.append(line[i])
+                    f.write(' '.join(newLine) + '\r\n')
             f.close()
-            self.fileCache = open('cache.txt', 'a')
-            self.serialOpenCloseButton.click()
+            # self.fileCache = open('cache.txt', 'a') # TODO
+            # self.serialOpenCloseButton.click()
         except Exception as e:
             print(e)
 
+    def handleSave(self):
+        self.serialOpenCloseButton.click()
+
+        myName = 'sensor_data_' + time.strftime("%Y%m%d%H%M%S", time.localtime())
+        fileName, fileType = QFileDialog.getSaveFileName(self, '保存数据', myName, "文本文档(*.txt);;所有文件(*.*)")
+        print('Save file', fileName, fileType)
+
+        self.progressDialog = QProgressDialog(self)
+        self.progressDialog.setWindowTitle("保存文件")
+        self.progressDialog.setLabelText("Downloading %s." % myName)
+        self.progressDialog.show()
+
+        # 启动保存文件线程
+        saveProcess = threading.Thread(target=self.on_saveReceivedData, args=(fileName, ))
+        saveProcess.setDaemon(True)
+        saveProcess.start()
+
+    # 更新下载进度
+    def updateDownloadProcess(self, bytesRead, totalBytes):
+        self.progressDialog.setMaximum(totalBytes)
+        self.progressDialog.setValue(bytesRead)
+
+    def closeDownloadProcess(self):
+        self.progressDialog.close()
 
     def cache_save(self, datas):
         try:
-            if self.fileCache is not None and not self.fileCache.closed:
+            # print('cache file writeable: %s' % self.fileCache.writable())
+            if self.fileCache is not None and not self.fileCache.closed and self.fileCache.writable():
                 self.fileCache.write(datas)
         except Exception as e:
-            print(e)
+            print('cache_save %s' % e)
 
     def sendData(self):
         try:
@@ -584,7 +641,7 @@ class MainWindow(QMainWindow):
                             del self.dataCache[0:mIndex]
                             break
                 else:
-                    if (self.timmer.isActive() == False):
+                    if self.timmer.isActive() == False:
                         self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
                         self.timmer.start()
                         # self.timmer.timeout.connect(self.onTimerOut)
@@ -634,7 +691,7 @@ class MainWindow(QMainWindow):
 
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
-                print("Time used: %.3fs" % elapsed)
+                # print("Time used: %.3fs" % elapsed) # TODO 取消注释
             except Exception as e:
                 print("chart.handleData error: %s" % e)
             # print('剩余数据 %d 字节' % len(self.dataCache))
@@ -856,8 +913,10 @@ class MainWindow(QMainWindow):
             # PyQtGraph
             if self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).isChecked():
                 self.curves[channelNum].show()
+                self.selectedChannelFlag[channelNum] = True
             else:
                 self.curves[channelNum].hide()
+                self.selectedChannelFlag[channelNum] = False
 
     def showHideSettings(self):
         if self.isHideSettings:

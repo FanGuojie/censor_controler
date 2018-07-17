@@ -49,7 +49,8 @@ class MainWindow(QMainWindow):
     fileCache = None
     img = None
     CHANNELCOUNT = 8 # 通道数量
-    dataMin = np.ones(CHANNELCOUNT)*33768
+    # dataMin = np.ones(CHANNELCOUNT)*33768
+    dataBaseline = np.zeros(CHANNELCOUNT)
     TotalSamplesPerChannel = 800 # x轴范围最大值
     SamplesPerChannel = 16 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
@@ -511,7 +512,7 @@ class MainWindow(QMainWindow):
                     f.write(' '.join(str(int(flag)) for flag in self.selectedChannelFlag) + '\n')
                 line = self.fileCache.readline()
                 if not line:
-                    print('文件末尾了')
+                    # print('文件末尾了')
                     self.closeDownloadDialogSignal.emit()  # 关闭下载对话框
                     break
                 else:
@@ -666,9 +667,15 @@ class MainWindow(QMainWindow):
                 channelNumber = int(self.dataCache[0], 16)
                 channelData = int(''.join(self.dataCache[1:3]), 16)
                 # toShowData[channelNumber - 1].append(channelData)
-                if np.array(channelData).min() < self.dataMin[channelNumber - 1]:
-                    self.dataMin[channelNumber - 1] = np.array(channelData).min()
-                toShowData[channelNumber - 1].append(channelData - self.dataMin[channelNumber - 1]) # toShowData维度：(24, 16)
+
+                # if np.array(channelData).min() < self.dataMin[channelNumber - 1]:
+                #     self.dataMin[channelNumber - 1] = np.array(channelData).min()
+                # toShowData[channelNumber - 1].append(channelData - self.dataMin[channelNumber - 1]) # toShowData维度：(24, 16)
+
+                if self.dataBaseline[channelNumber - 1] == 0:
+                    self.dataBaseline[channelNumber - 1] = channelData
+                toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+
                 rawData[channelNumber - 1].append(channelData) # rowData维度：(24, 16)
                 # print('%s, %s' % (channelNumber, channelData))
                 # print(toShowData)

@@ -46,9 +46,9 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 32
+    CHANNELCOUNT = 32 # 通道数量
     dataMin = np.ones(CHANNELCOUNT)*33768
-    TotalSamplesPerChannel = 400 # x轴范围最大值
+    TotalSamplesPerChannel = 800 # x轴范围最大值
     SamplesPerChannel = 16 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
 
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         self.initTool()
         self.initEvent()
         self.programStartGetSavedParameters()
-        self.initSim() # 使用模拟数据而不是串口数据 TODO 删除
+        # self.initSim() # 使用模拟数据而不是串口数据 TODO 删除
         return
 
     def __del__(self):
@@ -154,8 +154,9 @@ class MainWindow(QMainWindow):
         btnWidget.setLayout(btnLayout)
 
         # 压力折线图
-        self.pw0 = pg.PlotWidget(name='Plot1')
+        self.pw0 = pg.PlotWidget(name='Plot1', title='压力曲线')
         self.pw0.useOpenGL(True)
+        self.pw0.enableAutoRange('y', True)
         # self.pw0.addLegend()
         # self.pw0.setYRange(0, 1536)
         # self.pw0.setBackground('w')
@@ -163,7 +164,9 @@ class MainWindow(QMainWindow):
         self.initPlotChart()
 
         # 压力热力图
-        pw = pg.PlotWidget(name='Plot2')
+        pw = pg.PlotWidget(name='Plot2', title='压力区域')
+        # pw.setAutoPan(y=True)
+        # pw.enableAutoRange('y', True)
         # pw.hideAxis('bottom')
         sendReceiveLayout.addWidget(pw)
         self.img = pg.ImageItem()
@@ -634,7 +637,7 @@ class MainWindow(QMainWindow):
                 print("Time used: %.3fs" % elapsed)
             except Exception as e:
                 print("chart.handleData error: %s" % e)
-            # print(len(self.dataCache))
+            # print('剩余数据 %d 字节' % len(self.dataCache))
 
     def blend_color(self, color1, color2, f):
         [r1, g1, b1] = color1

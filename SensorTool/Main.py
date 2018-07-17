@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 32 # 通道数量
+    CHANNELCOUNT = 8 # 通道数量
     dataMin = np.ones(CHANNELCOUNT)*33768
     TotalSamplesPerChannel = 800 # x轴范围最大值
     SamplesPerChannel = 16 # 每个通道每次更新的值数量
@@ -389,12 +389,12 @@ class MainWindow(QMainWindow):
     def cacheRawData(self, vals):
         rawData = np.array(vals)
         dataT = rawData.T  # 16*24
-        temList = [['\r\n'] for i in range(dataT.shape[0])]
+        temList = [['\n'] for i in range(dataT.shape[0])]
         cStackData = np.column_stack((dataT, np.array(temList)))
         stackData = np.hstack(cStackData).tolist()
 
         def myMap(data):
-            if data != '\r\n':
+            if data != '\n':
                 return ' ' + str(data) # 不是换行符，加空格
             return data
 
@@ -508,7 +508,7 @@ class MainWindow(QMainWindow):
 
                 # 文件第一行写入Channel选择情况
                 if seek == 0:
-                    f.write(' '.join(str(int(flag)) for flag in self.selectedChannelFlag) + '\r\n')
+                    f.write(' '.join(str(int(flag)) for flag in self.selectedChannelFlag) + '\n')
                 line = self.fileCache.readline()
                 if not line:
                     print('文件末尾了')
@@ -521,7 +521,7 @@ class MainWindow(QMainWindow):
                     for i in range(self.CHANNELCOUNT):
                         if self.selectedChannelFlag[i]:
                             newLine.append(line[i])
-                    f.write(' '.join(newLine) + '\r\n')
+                    f.write(' '.join(newLine) + '\n')
             f.close()
             # self.fileCache = open('cache.txt', 'a') # TODO
             # self.serialOpenCloseButton.click()

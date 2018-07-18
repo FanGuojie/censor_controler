@@ -677,7 +677,7 @@ class MainWindow(QMainWindow):
 
             for i in range(samples * self.CHANNELCOUNT):
                 channelNumber = int(self.dataCache[0], 16)
-                channelData = int(''.join(self.dataCache[1:3]), 16)
+                channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768)/4096
                 # toShowData[channelNumber - 1].append(channelData)
 
                 # if np.array(channelData).min() < self.dataMin[channelNumber - 1]:

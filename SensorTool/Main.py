@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 32  # 通道数量
+    CHANNELCOUNT = 24  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
     TotalSamplesPerChannel = 2000 # x轴范围最大值
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         self.initTool()
         self.initEvent()
         self.programStartGetSavedParameters()
-        self.initSim()  #使用模拟数据而不是串口数据 TODO 删除
+        # self.initSim()  #使用模拟数据而不是串口数据 TODO 删除
         return
 
     def __del__(self):

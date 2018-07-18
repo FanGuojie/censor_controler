@@ -25,6 +25,7 @@ except ImportError:
 if sys.platform == "win32":
     import ctypes
 from PyQt5.QtChart import *
+from scipy.signal import kaiserord, lfilter, firwin, freqz
 
 
 class MainWindow(QMainWindow):
@@ -48,10 +49,10 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 8 # 通道数量
+    CHANNELCOUNT = 32  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
-    TotalSamplesPerChannel = 800 # x轴范围最大值
+    TotalSamplesPerChannel = 2000 # x轴范围最大值
     SamplesPerChannel = 16 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
@@ -70,7 +71,7 @@ class MainWindow(QMainWindow):
         self.initTool()
         self.initEvent()
         self.programStartGetSavedParameters()
-        # self.initSim() # 使用模拟数据而不是串口数据 TODO 删除
+        self.initSim()  #使用模拟数据而不是串口数据 TODO 删除
         return
 
     def __del__(self):
@@ -242,8 +243,14 @@ class MainWindow(QMainWindow):
         # 停止位
         serialSettingsLayout.addWidget(serailStopbitsLabel, 4, 0)
         serialSettingsLayout.addWidget(self.serailStopbitsCombobox, 4, 1)
+
+        self.filterCheckBox = QCheckBox("滤波")
+        self.filterCheckBox.setChecked(True)
+        serialSettingsLayout.addWidget(self.filterCheckBox, 5, 0, 1, 2)
+
+
         # 打开/关闭按钮
-        serialSettingsLayout.addWidget(self.serialOpenCloseButton, 5, 0, 1, 2)
+        serialSettingsLayout.addWidget(self.serialOpenCloseButton, 6, 0, 1, 2)
 
         serialSettingsGroupBox.setLayout(serialSettingsLayout)
         settingLayout.addWidget(serialSettingsGroupBox)
@@ -303,7 +310,6 @@ class MainWindow(QMainWindow):
         self.serialOpenCloseButton.clicked.connect(self.openCloseSerial)
         # self.sendButtion.clicked.connect(self.sendData)
         self.receiveUpdateSignal.connect(self.updateReceivedDataDisplay)
-        # self.updateChartSignal.connect(self.chartTest.handleData) # 使用QChart绘图 TODO 取消注释
         self.updateChartSignal.connect(self.updateChart)
         self.cacheDataSignal.connect(self.cacheRawData)
         self.clearReceiveButtion.clicked.connect(self.clearReceiveBuffer)
@@ -384,6 +390,12 @@ class MainWindow(QMainWindow):
             if len(self.chartData[i]) > (self.TotalSamplesPerChannel // self.SamplesPerChannel):
                 self.chartData[i].pop(0)
             temp = np.hstack(self.chartData[i])
+
+            if self.filterCheckBox.isChecked():
+                # TODO 滤波
+                temp = self.filter(temp)
+                temp = temp[self.N-1:]
+
             self.curves[i].setData(temp)
 
     # 将数据保存到缓存文件
@@ -698,7 +710,7 @@ class MainWindow(QMainWindow):
 
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
-                # print("Time used: %.3fs" % elapsed) # TODO 取消注释
+                print("Time used: %.3fs" % elapsed) # TODO 取消注释
             except Exception as e:
                 print("chart.handleData error: %s" % e)
             # print('剩余数据 %d 字节' % len(self.dataCache))
@@ -742,7 +754,6 @@ class MainWindow(QMainWindow):
         self.sendCount = 0
         self.receiveUpdateSignal.emit(None)
         # 清空图表
-        # self.chartTest.handleClear()
         self.chartData = [[] for i in range(self.CHANNELCOUNT)]
         return
 
@@ -913,10 +924,7 @@ class MainWindow(QMainWindow):
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(self.ChannelCheckBoxAll.isChecked())
 
     def functionSetVisible(self):
-        # self.chartTest.setVisibleFlag(1, self.__getattribute__('ChannelCheckBox1').isChecked())
         for channelNum in range(self.CHANNELCOUNT):
-            # self.chartTest.setVisibleFlag((channelNum + 1), self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).isChecked())
-
             # PyQtGraph
             if self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).isChecked():
                 self.curves[channelNum].show()
@@ -991,6 +999,39 @@ class MainWindow(QMainWindow):
 
     def openDevManagement(self):
         os.system('start devmgmt.msc')
+
+    def filter(self, x):
+        sample_rate = 190  # TODO
+
+        # The Nyquist rate of the signal.
+        nyq_rate = sample_rate / 2.0
+
+        # The desired width of the transition from pass to stop,
+        # relative to the Nyquist rate.  We'll design the filter
+        # with a 5 Hz transition width.
+        width = 5.0 / nyq_rate
+
+        # The desired attenuation in the stop band, in dB.
+        ripple_db = 60.0
+
+        # Compute the order and Kaiser parameter for the FIR filter.
+        N, beta = kaiserord(ripple_db, width)
+
+        self.N = N
+
+        # The cutoff frequency of the filter.
+        cutoff_hz = 48.0
+
+        # Use firwin with a Kaiser window to create a lowpass FIR filter.
+        taps = firwin(N, cutoff_hz / nyq_rate, window=('kaiser', beta))
+
+        # Use lfilter to filter x with the FIR filter.
+        filtered_x = lfilter(taps, 1.0, x)
+
+        # The phase delay of the filtered signal.
+        delay = 0.5 * (N - 1) / sample_rate
+
+        return filtered_x
 
 def main():
     app = QApplication(sys.argv)

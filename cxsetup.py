@@ -28,8 +28,8 @@ target_name= 'sensor.exe'
 build_exe_options = {
     "include_files":["SensorToolData","README.MD","LICENSE"],
     #包含外围的ini、jpg文件，以及data目录下所有文件，以上所有的文件路径都是相对于cxsetup.py的路径。
-    "packages": ['PyQt5', 'pyqtgraph', 'numpy'],                #包含用到的包
-    "includes": ['PyQt5', 'pyqtgraph', 'numpy'],
+    "packages": ['PyQt5', 'pyqtgraph', 'numpy', 'scipy', 'scipy.spatial.ckdtree'],                #包含用到的包
+    "includes": ['PyQt5', 'pyqtgraph', 'numpy', 'scipy', 'scipy.spatial.ckdtree'],
     "excludes": [],                #提出wx里tkinter包
     "path": sys.path,                       #指定上述的寻找路径
     #  "icon": "COMToolData/assets/logo.ico"                        #指定ico文件

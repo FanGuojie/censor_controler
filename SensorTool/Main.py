@@ -52,8 +52,8 @@ class MainWindow(QMainWindow):
     CHANNELCOUNT = 24  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
-    TotalSamplesPerChannel = 2000 # x轴范围最大值
-    SamplesPerChannel = 16 # 每个通道每次更新的值数量
+    TotalSamplesPerChannel = 1600 # x轴范围最大值
+    SamplesPerChannel = 32 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
 
@@ -677,7 +677,8 @@ class MainWindow(QMainWindow):
 
             for i in range(samples * self.CHANNELCOUNT):
                 channelNumber = int(self.dataCache[0], 16)
-                channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768)/4096
+                channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768)/4096*1000
+                # channelData = int(''.join(self.dataCache[1:3]), 16)
                 # toShowData[channelNumber - 1].append(channelData)
 
                 # if np.array(channelData).min() < self.dataMin[channelNumber - 1]:
@@ -704,16 +705,16 @@ class MainWindow(QMainWindow):
                 tempC = np.zeros((self.CHANNELCOUNT, 3))  # 创建临时array，维度(24, 3)
                 # 根据压力值计算颜色，然后将颜色数组[r, g, b]赋值给tempC
                 for i in range(self.CHANNELCOUNT):
-                    tempC[(i % 8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1024)
+                    tempC[(i % 8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1000)
                 tempD = np.reshape(tempC, (8, self.CHANNELCOUNT//8, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
                 self.img.setImage(tempD)  # 更新压力热力图
 
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
-                print("Time used: %.3fs" % elapsed) # TODO 取消注释
+                # print("Time used: %.3fs" % elapsed) # TODO 取消注释
             except Exception as e:
                 print("chart.handleData error: %s" % e)
-            # print('剩余数据 %d 字节' % len(self.dataCache))
+            # print('剩余数据 %d 字节' % len(self.dataCache)) # TODO 注释
 
     def blend_color(self, color1, color2, f):
         [r1, g1, b1] = color1

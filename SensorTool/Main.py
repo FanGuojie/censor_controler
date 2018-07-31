@@ -52,8 +52,8 @@ class MainWindow(QMainWindow):
     CHANNELCOUNT = 32  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
-    TotalSamplesPerChannel = 1600 # x轴范围最大值
-    SamplesPerChannel = 64 # 每个通道每次更新的值数量
+    TotalSamplesPerChannel = 800 # x轴范围最大值
+    SamplesPerChannel = 32 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
 
@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
         serialSettingsLayout.addWidget(self.serailStopbitsCombobox, 4, 1)
 
         self.filterCheckBox = QCheckBox("滤波")
-        self.filterCheckBox.setChecked(True)
+        # self.filterCheckBox.setChecked(True)
         serialSettingsLayout.addWidget(self.filterCheckBox, 5, 0, 1, 2)
 
 
@@ -619,7 +619,7 @@ class MainWindow(QMainWindow):
         self.receiveProgressStop = False
         while(not self.receiveProgressStop):
             try:
-                length = 3 * self.SamplesPerChannel * 2
+                length = 3 * self.SamplesPerChannel
                 bytes = self.com.read(length)
                 # print('length = %s, len(bytes)= %s' % (length, len(bytes)))
                 self.receiveCount += len(bytes)
@@ -633,7 +633,7 @@ class MainWindow(QMainWindow):
                 #     self.serialPortCombobox.clear()
                 #     self.detectSerialPort()
                 print(e)
-            time.sleep(0.001)  # windows不注释会导致程序卡死
+            # time.sleep(0.001)  # windows不注释会导致程序卡死
         return
 
     def onReceiveTimerOut(self):
@@ -656,7 +656,7 @@ class MainWindow(QMainWindow):
                 #     self.detectSerialPort()
                 print(e)
             # time.sleep(0.005) # 不注释会导致程序卡死
-            t = threading.Timer(0.005, self.onReceiveTimerOut)
+            t = threading.Timer(0.001, self.onReceiveTimerOut)
             t.setDaemon(True)
             t.start()
 
@@ -748,9 +748,10 @@ class MainWindow(QMainWindow):
 
                 if self.dataBaseline[channelNumber - 1] == 0:
                     self.dataBaseline[channelNumber - 1] = channelData
-                # toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
-                if i//self.CHANNELCOUNT%2 == 0:
-                    toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+                toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+                # 降采样 1/4
+                # if i//self.CHANNELCOUNT%8 == 0:
+                #     toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
 
                 rawData[channelNumber - 1].append(channelData) # rowData维度：(24, 16)
                 # print('%s, %s' % (channelNumber, channelData))

@@ -49,11 +49,11 @@ class MainWindow(QMainWindow):
     feedFlag = True
     fileCache = None
     img = None
-    CHANNELCOUNT = 24  # 通道数量
+    CHANNELCOUNT = 32  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
     TotalSamplesPerChannel = 1600 # x轴范围最大值
-    SamplesPerChannel = 32 # 每个通道每次更新的值数量
+    SamplesPerChannel = 64 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
 
@@ -346,7 +346,7 @@ class MainWindow(QMainWindow):
 
         self.simTimer = QTimer()
         self.simTimer.timeout.connect(self.onSimTimerOut)
-        self.simTimer.setInterval(100)
+        self.simTimer.setInterval(10)
         self.simTimer.start()
 
     def onSimTimerOut(self):
@@ -463,6 +463,10 @@ class MainWindow(QMainWindow):
                     receiveProcess = threading.Thread(target=self.receiveData)
                     receiveProcess.setDaemon(True)
                     receiveProcess.start()
+                    # self.receiveProgressStop = False
+                    # t = threading.Timer(0.001, self.onReceiveTimerOut)
+                    # t.setDaemon(True)
+                    # t.start()
                 except Exception as e:
                     self.com.close()
                     self.receiveProgressStop = True
@@ -615,7 +619,7 @@ class MainWindow(QMainWindow):
         self.receiveProgressStop = False
         while(not self.receiveProgressStop):
             try:
-                length = 3 * self.SamplesPerChannel
+                length = 3 * self.SamplesPerChannel * 2
                 bytes = self.com.read(length)
                 # print('length = %s, len(bytes)= %s' % (length, len(bytes)))
                 self.receiveCount += len(bytes)
@@ -629,42 +633,91 @@ class MainWindow(QMainWindow):
                 #     self.serialPortCombobox.clear()
                 #     self.detectSerialPort()
                 print(e)
-            # time.sleep(0.001) # 不注释会导致程序卡死
+            time.sleep(0.001)  # windows不注释会导致程序卡死
         return
+
+    def onReceiveTimerOut(self):
+        # print('onReceiveTimerOut')
+        if not self.receiveProgressStop:
+            try:
+                # print(self.com.in_waiting)
+                length = 3 * self.SamplesPerChannel
+                bytes = self.com.read(length)
+                # print('length = %s, len(bytes)= %s' % (length, len(bytes)))
+                self.receiveCount += len(bytes)
+                strReceived = self.asciiB2HexString(bytes)
+                # print(strReceived)
+                self.receiveUpdateSignal.emit(strReceived)  # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
+            except Exception as e:
+                print("receiveData error")
+                # if self.com.is_open and not self.serialPortCombobox.isEnabled():
+                #     self.openCloseSerial()
+                #     self.serialPortCombobox.clear()
+                #     self.detectSerialPort()
+                print(e)
+            # time.sleep(0.005) # 不注释会导致程序卡死
+            t = threading.Timer(0.005, self.onReceiveTimerOut)
+            t.setDaemon(True)
+            t.start()
 
     def updateReceivedDataDisplay(self, str):
         try:
             if str != "" and not None:
                 # 将数据缓存在list中
                 temp = str.split(' ')
-                temp.pop() # 去掉最后一个为空格的元素
+                if temp[len(temp) - 1] == '':
+                    temp.pop() # 去掉最后一个为空格的元素
                 self.dataCache.extend(temp)
                 # print('str = %s, after split str = %s' % (str, temp))
 
                 # 获取起始数据的偏移量
+                # if self.offset is None:
+                #     for mIndex in range(48):
+                #         # print(mIndex)
+                #         tempList = self.dataCache[mIndex:9+mIndex:3]
+                #         # print(tempList)
+                #         if len(tempList) > 2 and int(tempList[2], 16) - int(tempList[1], 16) == 1 and int(tempList[1], 16) - int(tempList[0], 16) == 1:
+                #             self.offset = mIndex
+                #             # print(tempList)
+                #             print(self.offset)
+                #             del self.dataCache[0:mIndex]
+                #             break
+                # else:
+                #     if self.timmer.isActive() == False:
+                #         self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
+                #         self.timmer.start()
+                #         # self.timmer.timeout.connect(self.onTimerOut)
+
                 if self.offset is None:
-                    for mIndex in range(48):
-                        # print(mIndex)
-                        tempList = self.dataCache[mIndex:9+mIndex:3]
-                        # print(tempList)
-                        if len(tempList) > 2 and int(tempList[2], 16) - int(tempList[1], 16) == 1 and int(tempList[1], 16) - int(tempList[0], 16) == 1:
-                            self.offset = mIndex
-                            # print(tempList)
-                            print(self.offset)
-                            del self.dataCache[0:mIndex]
-                            break
+                    self.offset = self.findOffset()
+                    del self.dataCache[0:self.offset]
+                elif self.findOffset() != 0:
+                    self.offset = self.findOffset()
+                    del self.dataCache[0:self.offset]
                 else:
                     if self.timmer.isActive() == False:
-                        self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
+                        self.timmer.setInterval(20) # 40ms更新一次，也就是刷新速度为25Hz
                         self.timmer.start()
-                        # self.timmer.timeout.connect(self.onTimerOut)
+
         except Exception as e1:
             print("updateReceivedDataDisplay error: %s" % e1)
 
         self.statusBarReceiveCount.setText("%s(bytes):%d" %(parameters.strReceive ,self.receiveCount))
         return
 
+    def findOffset(self):
+        for mIndex in range(48):
+            # print(mIndex)
+            tempList = self.dataCache[mIndex:9 + mIndex:3]
+            # print(tempList)
+            if len(tempList) > 2 and int(tempList[2], 16) - int(tempList[1], 16) == 1 and int(tempList[1], 16) - int(tempList[0], 16) == 1:
+                # print('offset = %d' % mIndex)
+                return mIndex
+
     def onTimerOut(self):
+        if self.receiveProgressStop:
+            return
+
         samples = self.SamplesPerChannel # 每次每个通道更新16个数据点，16 = 400/(1000/40)，其中400指每个通道收到数据点的速度是400pts（串口接收速率）
         if len(self.dataCache) > (3 * samples * self.CHANNELCOUNT):
 
@@ -676,7 +729,15 @@ class MainWindow(QMainWindow):
             rawData = [[] for i in range(self.CHANNELCOUNT)]
 
             for i in range(samples * self.CHANNELCOUNT):
+                # print(self.dataCache[0:7])
                 channelNumber = int(self.dataCache[0], 16)
+
+                if channelNumber > self.CHANNELCOUNT:
+                    print('channelNumber error: %d' % channelNumber)
+                    self.offset = self.findOffset()
+                    del self.dataCache[0:self.offset]
+                    continue
+
                 channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768)/4096*1000
                 # channelData = int(''.join(self.dataCache[1:3]), 16)
                 # toShowData[channelNumber - 1].append(channelData)
@@ -687,7 +748,9 @@ class MainWindow(QMainWindow):
 
                 if self.dataBaseline[channelNumber - 1] == 0:
                     self.dataBaseline[channelNumber - 1] = channelData
-                toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+                # toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+                if i//self.CHANNELCOUNT%2 == 0:
+                    toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
 
                 rawData[channelNumber - 1].append(channelData) # rowData维度：(24, 16)
                 # print('%s, %s' % (channelNumber, channelData))
@@ -711,10 +774,10 @@ class MainWindow(QMainWindow):
 
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
-                # print("Time used: %.3fs" % elapsed) # TODO 取消注释
+                print("Time used: %.3fs" % elapsed) # TODO 取消注释
             except Exception as e:
                 print("chart.handleData error: %s" % e)
-            # print('剩余数据 %d 字节' % len(self.dataCache)) # TODO 注释
+            print('剩余数据 %d 字节' % len(self.dataCache)) # TODO 注释
 
     def blend_color(self, color1, color2, f):
         [r1, g1, b1] = color1

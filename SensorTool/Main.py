@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
     CHANNELCOUNT = 32  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
-    TotalSamplesPerChannel = 800 # x轴范围最大值
+    TotalSamplesPerChannel = 640 # x轴范围最大值
     SamplesPerChannel = 32 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
@@ -391,14 +391,17 @@ class MainWindow(QMainWindow):
                 return
 
             self.chartData[i].append(data[i])
+            # print(len(data[i]))
             if len(self.chartData[i]) > (self.TotalSamplesPerChannel // self.SamplesPerChannel):
                 self.chartData[i].pop(0)
             temp = np.hstack(self.chartData[i])
+            # print('len of temp = %d' % len(temp))
 
             if self.filterCheckBox.isChecked():
                 # TODO 滤波
                 temp = self.filter(temp)
-                temp = temp[self.N-1:]
+                # print('len of temp after fileter = %d' % len(temp))
+                temp = temp[self.N-1+len(data[i]):]
 
             self.curves[i].setData(temp)
 

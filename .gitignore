@@ -10,5 +10,6 @@ build
 *.pyc
 
 SensorTool/cache.txt
+SensorTool/rawCache
 
 

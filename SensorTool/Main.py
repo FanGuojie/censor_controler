@@ -48,6 +48,7 @@ class MainWindow(QMainWindow):
     timmer = QTimer()
     feedFlag = True
     fileCache = None
+    rawDataCache = None
     img = None
     CHANNELCOUNT = 32  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
@@ -386,6 +387,9 @@ class MainWindow(QMainWindow):
         # print('updateChart')
         data = np.array(vals) # 24*16
         for i in range(self.CHANNELCOUNT):
+            if self.receiveProgressStop:
+                return
+
             self.chartData[i].append(data[i])
             if len(self.chartData[i]) > (self.TotalSamplesPerChannel // self.SamplesPerChannel):
                 self.chartData[i].pop(0)
@@ -400,6 +404,9 @@ class MainWindow(QMainWindow):
 
     # 将数据保存到缓存文件
     def cacheRawData(self, vals):
+        if self.receiveProgressStop:
+            return
+
         rawData = np.array(vals)
         dataT = rawData.T  # 16*24
         temList = [['\n'] for i in range(dataT.shape[0])]
@@ -433,6 +440,7 @@ class MainWindow(QMainWindow):
                 print('接收数据长度 = %d' % (int(len(self.dataCache))))
                 self.dataCache.clear()
                 self.fileCache.close()
+                self.rawDataCache.close()
                 self.img.clear() # clear压力区域图
                 self.offset = None
                 self.timmer.stop()
@@ -617,14 +625,24 @@ class MainWindow(QMainWindow):
 
     def receiveData(self):
         self.receiveProgressStop = False
+        self.rawDataCache = open('rawCache', 'w')
+        self.rawDataCache.truncate()
+        self.rawDataCache = open('rawCache', 'a')
         while(not self.receiveProgressStop):
             try:
                 length = 3 * self.SamplesPerChannel
-                bytes = self.com.read(length)
+                read_bytes = self.com.read(length)
+                # print('com in_waiting = %d' % self.com.in_waiting)
                 # print('length = %s, len(bytes)= %s' % (length, len(bytes)))
-                self.receiveCount += len(bytes)
-                strReceived = self.asciiB2HexString(bytes)
+
+                self.receiveCount += len(read_bytes)
+
+                strReceived = self.asciiB2HexString(read_bytes)
                 # print(strReceived)
+
+                if self.rawDataCache is not None and not self.rawDataCache.closed and self.rawDataCache.writable():
+                    self.rawDataCache.write(strReceived) # 写入缓存文件
+
                 self.receiveUpdateSignal.emit(strReceived) # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
             except Exception as e:
                 print("receiveData error")
@@ -696,7 +714,7 @@ class MainWindow(QMainWindow):
                     del self.dataCache[0:self.offset]
                 else:
                     if self.timmer.isActive() == False:
-                        self.timmer.setInterval(20) # 40ms更新一次，也就是刷新速度为25Hz
+                        self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
                         self.timmer.start()
 
         except Exception as e1:
@@ -728,7 +746,9 @@ class MainWindow(QMainWindow):
             toShowData = [[] for i in range(self.CHANNELCOUNT)]
             rawData = [[] for i in range(self.CHANNELCOUNT)]
 
-            for i in range(samples * self.CHANNELCOUNT):
+            for i in range(len(self.dataCache) // 3):
+                if self.receiveProgressStop:
+                    return
                 # print(self.dataCache[0:7])
                 channelNumber = int(self.dataCache[0], 16)
 

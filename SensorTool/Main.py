@@ -399,9 +399,12 @@ class MainWindow(QMainWindow):
 
             if self.filterCheckBox.isChecked():
                 # TODO 滤波
-                temp = self.filter(temp)
-                # print('len of temp after fileter = %d' % len(temp))
-                temp = temp[self.N-1+len(data[i]):]
+                try:
+                    temp = self.filter(temp)
+                    # print('len of temp after fileter = %d' % len(temp))
+                    temp = temp[self.N-1+len(data[i]):]
+                except Exception as e:
+                    print(e)
 
             self.curves[i].setData(temp)
 
@@ -410,18 +413,21 @@ class MainWindow(QMainWindow):
         if self.receiveProgressStop:
             return
 
-        rawData = np.array(vals)
-        dataT = rawData.T  # 16*24
-        temList = [['\n'] for i in range(dataT.shape[0])]
-        cStackData = np.column_stack((dataT, np.array(temList)))
-        stackData = np.hstack(cStackData).tolist()
+        try :
+            rawData = np.array(vals)
+            dataT = rawData.T  # 16*24
+            temList = [['\n'] for i in range(dataT.shape[0])]
+            cStackData = np.column_stack((dataT, np.array(temList)))
+            stackData = np.hstack(cStackData).tolist()
 
-        def myMap(data):
-            if data != '\n':
-                return ' ' + str(data) # 不是换行符，加空格
-            return data
+            def myMap(data):
+                if data != '\n':
+                    return ' ' + str(data) # 不是换行符，加空格
+                return data
 
-        self.cache_save(''.join(map(myMap, stackData)))  # 缓存
+            self.cache_save(''.join(map(myMap, stackData)))  # 缓存
+        except Exception as e:
+            print(e)
 
     def openCloseSerialProcess(self):
         try:
@@ -749,7 +755,8 @@ class MainWindow(QMainWindow):
             toShowData = [[] for i in range(self.CHANNELCOUNT)]
             rawData = [[] for i in range(self.CHANNELCOUNT)]
 
-            for i in range(len(self.dataCache) // 3):
+            # 先整除(self.CHANNELCOUNT * 3)，再乘以self.CHANNELCOUNT，保证生成的二维list列数是一致的
+            for i in range(len(self.dataCache) // (self.CHANNELCOUNT * 3) * self.CHANNELCOUNT):
                 if self.receiveProgressStop:
                     return
                 # print(self.dataCache[0:7])

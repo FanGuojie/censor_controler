@@ -7,7 +7,7 @@ from pylab import figure, clf, plot, xlabel, ylabel, xlim, ylim, title, grid, ax
 # Create a signal for demonstration.
 #------------------------------------------------
 
-sample_rate = 190
+sample_rate = 180
 nsamples = 2000
 t = arange(nsamples) / sample_rate
 # x = cos(2*pi*0.5*t) + 0.2*sin(2*pi*2.5*t+0.1) + \
@@ -27,16 +27,16 @@ nyq_rate = sample_rate / 2.0
 # The desired width of the transition from pass to stop,
 # relative to the Nyquist rate.  We'll design the filter
 # with a 5 Hz transition width.
-width = 5.0/nyq_rate
+width = 10.0/nyq_rate
 
 # The desired attenuation in the stop band, in dB.
-ripple_db = 60.0
+ripple_db = 30.0
 
 # Compute the order and Kaiser parameter for the FIR filter.
 N, beta = kaiserord(ripple_db, width)
 
 # The cutoff frequency of the filter.
-cutoff_hz = 48.0
+cutoff_hz = 45.0
 
 # Use firwin with a Kaiser window to create a lowpass FIR filter.
 taps = firwin(N, cutoff_hz/nyq_rate, window=('kaiser', beta))

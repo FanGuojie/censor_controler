@@ -161,6 +161,7 @@ class MainWindow(QMainWindow):
 
         # 压力折线图
         self.pw0 = pg.PlotWidget(name='Plot1', title='压力曲线')
+        self.pw0.setLabel('left', '电容值', units='10^-3pf')
         self.pw0.useOpenGL(True)
         self.pw0.enableAutoRange('y', True)
         # self.pw0.addLegend()
@@ -264,6 +265,8 @@ class MainWindow(QMainWindow):
         for channelNum in range(self.CHANNELCOUNT):
             self.__setattr__("ChannelCheckBox" + str(channelNum + 1), QCheckBox("CH" + str(channelNum + 1)))
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(True)
+            self.__setattr__("ChannelValueLabel" + str(channelNum + 1), QLineEdit('----'))
+            self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)).setFixedWidth(60)
 
         functionalGroupBox = QGroupBox(parameters.strFunctionalSend)
         # functionalGridLayout = QGridLayout()
@@ -274,7 +277,15 @@ class MainWindow(QMainWindow):
 
         # add channel checkbox into widget
         for channelNum in range(self.CHANNELCOUNT):
-            checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)), (channelNum/2+1), (channelNum)%2)
+            if (channelNum)%2 == 0:
+                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)), (channelNum/2+1), (channelNum)%2)
+                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)),
+                                             (channelNum / 2 + 1), (channelNum) % 2 + 1)
+            else:
+                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)),
+                                                 (channelNum / 2 + 1), (channelNum) % 2 + 2)
+                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)),
+                                                 (channelNum / 2 + 1), (channelNum) % 2 + 3)
 
         # checkBoxVerticalLayout.addStretch(1)
         functionalGroupBox.setLayout(checkBoxVerticalLayout)
@@ -368,7 +379,7 @@ class MainWindow(QMainWindow):
         for idx in range(self.CHANNELCOUNT):
             curve = pg.PlotCurveItem(pen=(idx, self.CHANNELCOUNT), name=str(idx + 1))
             self.pw0.addItem(curve)
-            curve.setPos(0, idx * 6)
+            curve.setPos(0, 0)
 
             # channel文字
             # text = pg.TextItem(str(idx + 1))
@@ -407,6 +418,7 @@ class MainWindow(QMainWindow):
                     print(e)
 
             self.curves[i].setData(temp)
+            self.__getattribute__("ChannelValueLabel" + str(i + 1)).setText('%.2f' % temp[len(temp) - 1] if temp[len(temp) - 1]>0 else '0')
 
     # 将数据保存到缓存文件
     def cacheRawData(self, vals):
@@ -415,6 +427,9 @@ class MainWindow(QMainWindow):
 
         try :
             rawData = np.array(vals)
+            # print(len(rawData.shape))
+            if len(rawData.shape) < 2:
+                return
             dataT = rawData.T  # 16*24
             temList = [['\n'] for i in range(dataT.shape[0])]
             cStackData = np.column_stack((dataT, np.array(temList)))
@@ -756,6 +771,8 @@ class MainWindow(QMainWindow):
             rawData = [[] for i in range(self.CHANNELCOUNT)]
 
             # 先整除(self.CHANNELCOUNT * 3)，再乘以self.CHANNELCOUNT，保证生成的二维list列数是一致的
+            # print(len(self.dataCache) // (self.CHANNELCOUNT * 3) * self.CHANNELCOUNT)
+            # loopNum = len(self.dataCache) // (self.CHANNELCOUNT * 3) * self.CHANNELCOUNT
             for i in range(len(self.dataCache) // (self.CHANNELCOUNT * 3) * self.CHANNELCOUNT):
                 if self.receiveProgressStop:
                     return
@@ -1024,9 +1041,11 @@ class MainWindow(QMainWindow):
             if self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).isChecked():
                 self.curves[channelNum].show()
                 self.selectedChannelFlag[channelNum] = True
+                self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)).show()
             else:
                 self.curves[channelNum].hide()
                 self.selectedChannelFlag[channelNum] = False
+                self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)).hide()
 
     def showHideSettings(self):
         if self.isHideSettings:
@@ -1096,7 +1115,7 @@ class MainWindow(QMainWindow):
         os.system('start devmgmt.msc')
 
     def filter(self, x):
-        sample_rate = 190  # TODO
+        sample_rate = 180  # TODO
 
         # The Nyquist rate of the signal.
         nyq_rate = sample_rate / 2.0
@@ -1104,10 +1123,10 @@ class MainWindow(QMainWindow):
         # The desired width of the transition from pass to stop,
         # relative to the Nyquist rate.  We'll design the filter
         # with a 5 Hz transition width.
-        width = 5.0 / nyq_rate
+        width = 10.0 / nyq_rate
 
         # The desired attenuation in the stop band, in dB.
-        ripple_db = 60.0
+        ripple_db = 30.0
 
         # Compute the order and Kaiser parameter for the FIR filter.
         N, beta = kaiserord(ripple_db, width)
@@ -1115,7 +1134,7 @@ class MainWindow(QMainWindow):
         self.N = N
 
         # The cutoff frequency of the filter.
-        cutoff_hz = 48.0
+        cutoff_hz = 45.0
 
         # Use firwin with a Kaiser window to create a lowpass FIR filter.
         taps = firwin(N, cutoff_hz / nyq_rate, window=('kaiser', beta))

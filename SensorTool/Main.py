@@ -50,13 +50,14 @@ class MainWindow(QMainWindow):
     fileCache = None
     rawDataCache = None
     img = None
-    CHANNELCOUNT = 32  # 通道数量
+    CHANNELCOUNT = 25  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
     TotalSamplesPerChannel = 640 # x轴范围最大值
     SamplesPerChannel = 32 # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
+    AREA_COL = 5
 
     def __init__(self, app):
         super().__init__()
@@ -265,8 +266,8 @@ class MainWindow(QMainWindow):
         for channelNum in range(self.CHANNELCOUNT):
             self.__setattr__("ChannelCheckBox" + str(channelNum + 1), QCheckBox("CH" + str(channelNum + 1)))
             self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(True)
-            self.__setattr__("ChannelValueLabel" + str(channelNum + 1), QLineEdit('----'))
-            self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)).setFixedWidth(60)
+            self.__setattr__("ChannelValueLabel" + str(channelNum + 1), QLineEdit('-------'))
+            self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)).setFixedWidth(70)
 
         functionalGroupBox = QGroupBox(parameters.strFunctionalSend)
         # functionalGridLayout = QGridLayout()
@@ -418,7 +419,8 @@ class MainWindow(QMainWindow):
                     print(e)
 
             self.curves[i].setData(temp)
-            self.__getattribute__("ChannelValueLabel" + str(i + 1)).setText('%.2f' % temp[len(temp) - 1] if temp[len(temp) - 1]>0 else '0')
+            if len(temp) > 0:
+                self.__getattribute__("ChannelValueLabel" + str(i + 1)).setText('%.2f' % temp[len(temp) - 1] if temp[len(temp) - 1]>0 else '0')
 
     # 将数据保存到缓存文件
     def cacheRawData(self, vals):
@@ -816,8 +818,8 @@ class MainWindow(QMainWindow):
                 tempC = np.zeros((self.CHANNELCOUNT, 3))  # 创建临时array，维度(24, 3)
                 # 根据压力值计算颜色，然后将颜色数组[r, g, b]赋值给tempC
                 for i in range(self.CHANNELCOUNT):
-                    tempC[(i % 8)*(self.CHANNELCOUNT//8)+(i//8), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1000)
-                tempD = np.reshape(tempC, (8, self.CHANNELCOUNT//8, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
+                    tempC[(i % self.AREA_COL)*(self.CHANNELCOUNT//self.AREA_COL)+(i//self.AREA_COL), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1000)
+                tempD = np.reshape(tempC, (self.AREA_COL, self.CHANNELCOUNT//self.AREA_COL, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
                 self.img.setImage(tempD)  # 更新压力热力图
 
                 elapsed = (time.clock() - start)
@@ -1115,7 +1117,7 @@ class MainWindow(QMainWindow):
         os.system('start devmgmt.msc')
 
     def filter(self, x):
-        sample_rate = 180  # TODO
+        sample_rate = 512  # TODO
 
         # The Nyquist rate of the signal.
         nyq_rate = sample_rate / 2.0
@@ -1126,7 +1128,7 @@ class MainWindow(QMainWindow):
         width = 10.0 / nyq_rate
 
         # The desired attenuation in the stop band, in dB.
-        ripple_db = 30.0
+        ripple_db = 20.0
 
         # Compute the order and Kaiser parameter for the FIR filter.
         N, beta = kaiserord(ripple_db, width)
@@ -1134,7 +1136,7 @@ class MainWindow(QMainWindow):
         self.N = N
 
         # The cutoff frequency of the filter.
-        cutoff_hz = 45.0
+        cutoff_hz = 10.0
 
         # Use firwin with a Kaiser window to create a lowpass FIR filter.
         taps = firwin(N, cutoff_hz / nyq_rate, window=('kaiser', beta))

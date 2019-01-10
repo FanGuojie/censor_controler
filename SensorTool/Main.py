@@ -1,31 +1,33 @@
-import sys
+import binascii
 import os
 import random
-from SensorTool import parameters, helpAbout, autoUpdate
-from SensorTool.Combobox import ComboBox
-from PyQt5.QtCore import pyqtSignal, Qt, QTimer, QPoint, QMetaMethod
-from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton, QMessageBox, QDesktopWidget, QMainWindow,
-                             QVBoxLayout, QHBoxLayout, QGridLayout, QTextEdit, QLabel, QRadioButton, QCheckBox,
-                             QLineEdit, QGroupBox, QSplitter, QFileDialog, QProgressDialog)
-from PyQt5.QtGui import QIcon, QFont, QTextCursor, QPixmap, QPen, QPainter, QColor, QTextDocumentWriter
-import serial
-import serial.tools.list_ports
-import serial.threaded
+import re
+import sys
 import threading
 import time
-import binascii
-import re
-from collections import deque
-import pyqtgraph as pg
+
 import numpy as np
+import pyqtgraph as pg
+# from PyQt5 import QtWidgets
+import serial
+import serial.threaded
+import serial.tools.list_ports
+from PyQt5.QtCore import pyqtSignal, Qt, QTimer
+from PyQt5.QtGui import QIcon, QFont, QPixmap
+from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton, QMessageBox, QDesktopWidget, QMainWindow,
+                             QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QCheckBox, QLineEdit, QGroupBox, QSplitter,
+                             QFileDialog, QProgressDialog, QRadioButton)
+
+from SensorTool import parameters, helpAbout, autoUpdate
+from SensorTool.Combobox import ComboBox
+
 try:
-  import cPickle as pickle
+    import cPickle as pickle
 except ImportError:
-  import pickle
+    import pickle
 if sys.platform == "win32":
     import ctypes
-from PyQt5.QtChart import *
-from scipy.signal import kaiserord, lfilter, firwin, freqz
+from scipy.signal import kaiserord, lfilter, firwin
 
 
 class MainWindow(QMainWindow):
@@ -53,14 +55,22 @@ class MainWindow(QMainWindow):
     CHANNELCOUNT = 25  # 通道数量
     # dataMin = np.ones(CHANNELCOUNT)*33768
     dataBaseline = np.zeros(CHANNELCOUNT)
-    TotalSamplesPerChannel = 640 # x轴范围最大值
-    SamplesPerChannel = 32 # 每个通道每次更新的值数量
+    TotalSamplesPerChannel = 640  # x轴范围最大值
+    SamplesPerChannel = 32  # 每个通道每次更新的值数量
     chartData = [[] for i in range(CHANNELCOUNT)]
     selectedChannelFlag = [True for i in range(CHANNELCOUNT)]
     AREA_COL = 5
+    sensors = {"none": 0, "serial": 1, "camera": 2}  # 0 为阵列传感器， 1为视触觉传感器
 
     def __init__(self, app):
         super().__init__()
+        # self.sensor = self.sensors["none"]
+        self.sensor = self.sensors["serial"]
+        self.init_ui()
+        self.init_welcome()
+        self.init_serialCensor()
+        self.init_cameraCensor()
+
         self.app = app
         pathDirList = sys.argv[0].replace("\\", "/").split("/")
         pathDirList.pop()
@@ -69,12 +79,72 @@ class MainWindow(QMainWindow):
             pathDirList.pop()
             self.DataPath = os.path.abspath("/".join(str(i) for i in pathDirList))
         self.DataPath = (self.DataPath + "/" + parameters.strDataDirName).replace("\\", "/")
-        self.initWindow()
+        self.programStartGetSavedParameters()
+
+        self.frameLayout.addWidget(self.cameraCensorWidget)
+        self.frameLayout.addWidget(self.serialCensorWidget)
+        self.frameLayout.addWidget(self.welcomeWidget)
+        self.cameraCensorWidget.hide()
+        self.serialCensorWidget.hide()
+        # self.initSim()  #使用模拟数据而不是串口数据 TODO 删除
+        time.sleep(1)
+        # while(True):
+
+        return
+
+    def init_ui(self):
+        self.frameWidget = QWidget()
+        self.frameLayout = QVBoxLayout()
+        rd1 = QRadioButton("Serial")
+        rd2 = QRadioButton("Carmera")
+        h_box = QHBoxLayout()
+        h_box.addWidget(rd1)
+        h_box.addWidget(rd2)
+        rd1.clicked.connect(self.setSerial)
+        rd2.clicked.connect(self.setCarmera)
+        self.frameLayout.addLayout(h_box)
+        self.frameWidget.setLayout(self.frameLayout)
+        self.setCentralWidget(self.frameWidget)
+
+    def setSerial(self):
+        self.sensor = self.sensors["serial"]
+        self.cameraCensorWidget.hide()
+        self.welcomeWidget.hide()
+        self.serialCensorWidget.show()
+        print("Srial")
+
+    def setCarmera(self):
+        self.serialCensorWidget.hide()
+        self.welcomeWidget.hide()
+        self.cameraCensorWidget.show()
+        print("Camera")
+
+    def init_welcome(self):
+        self.welcomeWidget = QWidget()
+        self.welcomeWidget.setWindowTitle("Hello!")
+        self.welcomeWidget.setGeometry(100, 100, 1000, 1000)
+        l1 = QLabel("welcome to censor controler system")
+        l2 = QLabel("copyright by 类脑计算与认知团队")
+        l1.setAlignment(Qt.AlignCenter)
+        l2.setAlignment(Qt.AlignCenter)
+        l1.setFont(QFont("Comic Sans MS",20,QFont.Bold))
+        l2.setFont(QFont("Roman times",10,QFont.Bold))
+        v_box = QVBoxLayout()
+        v_box.addWidget(l1)
+        v_box.addWidget(l2)
+        self.welcomeWidget.setLayout(v_box)
+
+    def init_serialCensor(self):
+        self.initSerialCensorWidget()
         self.initTool()
         self.initEvent()
-        self.programStartGetSavedParameters()
-        # self.initSim()  #使用模拟数据而不是串口数据 TODO 删除
-        return
+
+    def init_cameraCensor(self):
+        self.cameraCensorWidget = QWidget()
+        self.cameraCensorWidget.setWindowTitle("Hello!")
+        self.cameraCensorWidget.setGeometry(100, 100, 1000, 1000)
+        l = QLabel(self.cameraCensorWidget)
+        l.setText("camera")
 
     def __del__(self):
         return
@@ -83,12 +153,11 @@ class MainWindow(QMainWindow):
         self.com = serial.Serial()
         return
 
-    def initWindow(self):
+    def initSerialCensorWidget(self):
         QToolTip.setFont(QFont('SansSerif', 10))
 
-        frameWidget = QWidget()
+        self.serialCensorWidget = QWidget()
         frameLayout = QVBoxLayout()  # 整体垂直布局，包括menu和main
-
         # main layout
         mainWidget = QSplitter(Qt.Horizontal)
 
@@ -97,7 +166,7 @@ class MainWindow(QMainWindow):
         configWidget.setLayout(configLayout)
 
         self.settingWidget = QWidget()
-        self.settingWidget.setProperty("class","settingWidget")
+        self.settingWidget.setProperty("class", "settingWidget")
 
         # self.receiveSendWidget = QSplitter(Qt.Vertical)
         self.receiveSendWidget = QWidget()
@@ -124,8 +193,7 @@ class MainWindow(QMainWindow):
 
         # frameLayout.addLayout(menuLayout)
         frameLayout.addWidget(mainWidget)
-        frameWidget.setLayout(frameLayout)
-        self.setCentralWidget(frameWidget)
+        self.serialCensorWidget.setLayout(frameLayout)
 
         # option layout
         self.settingsButton = QPushButton()
@@ -251,7 +319,6 @@ class MainWindow(QMainWindow):
         # self.filterCheckBox.setChecked(True)
         serialSettingsLayout.addWidget(self.filterCheckBox, 5, 0, 1, 2)
 
-
         # 打开/关闭按钮
         serialSettingsLayout.addWidget(self.serialOpenCloseButton, 6, 0, 1, 2)
 
@@ -278,10 +345,11 @@ class MainWindow(QMainWindow):
 
         # add channel checkbox into widget
         for channelNum in range(self.CHANNELCOUNT):
-            if (channelNum)%2 == 0:
-                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)), (channelNum/2+1), (channelNum)%2)
+            if (channelNum) % 2 == 0:
+                checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)),
+                                                 (channelNum / 2 + 1), (channelNum) % 2)
                 checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelValueLabel" + str(channelNum + 1)),
-                                             (channelNum / 2 + 1), (channelNum) % 2 + 1)
+                                                 (channelNum / 2 + 1), (channelNum) % 2 + 1)
             else:
                 checkBoxVerticalLayout.addWidget(self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)),
                                                  (channelNum / 2 + 1), (channelNum) % 2 + 2)
@@ -295,12 +363,12 @@ class MainWindow(QMainWindow):
         # main window
         self.statusBarStauts = QLabel()
         self.statusBarStauts.setMinimumWidth(80)
-        self.statusBarStauts.setText("<font color=%s>%s</font>" %("#008200", parameters.strReady))
+        self.statusBarStauts.setText("<font color=%s>%s</font>" % ("#008200", parameters.strReady))
         # self.statusBarSendCount = QLabel(parameters.strSend+"(bytes): "+"0")
-        self.statusBarReceiveCount = QLabel(parameters.strReceive+"(bytes): "+"0")
+        self.statusBarReceiveCount = QLabel(parameters.strReceive + "(bytes): " + "0")
         self.statusBar().addWidget(self.statusBarStauts)
         # self.statusBar().addWidget(self.statusBarSendCount,2)
-        self.statusBar().addWidget(self.statusBarReceiveCount,3)
+        self.statusBar().addWidget(self.statusBarReceiveCount, 3)
         # self.statusBar()
 
         # 保存文件进度对话框
@@ -309,10 +377,10 @@ class MainWindow(QMainWindow):
 
         self.resize(800, 500)
         self.MoveToCenter()
-        self.setWindowTitle(parameters.appName+" V"+str(helpAbout.versionMajor)+"."+str(helpAbout.versionMinor))
+        self.setWindowTitle(parameters.appName + " V" + str(helpAbout.versionMajor) + "." + str(helpAbout.versionMinor))
         icon = QIcon()
-        print("icon path:"+self.DataPath+"/"+parameters.appIcon)
-        icon.addPixmap(QPixmap(self.DataPath+"/"+parameters.appIcon), QIcon.Normal, QIcon.Off)
+        print("icon path:" + self.DataPath + "/" + parameters.appIcon)
+        icon.addPixmap(QPixmap(self.DataPath + "/" + parameters.appIcon), QIcon.Normal, QIcon.Off)
         self.setWindowIcon(icon)
         if sys.platform == "win32":
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("comtool")
@@ -346,8 +414,8 @@ class MainWindow(QMainWindow):
         # self.uartReceiveTimer.timeout.connect(self.onUartReceiveTimeOut)
         self.timmer.timeout.connect(self.onTimerOut)
         # self.progressDialog.canceled.connect(self.cancelDownload) # TODO 取消保存
-        self.updateDownloadSignal.connect(self.updateDownloadProcess) # 更新保存文件进度
-        self.closeDownloadDialogSignal.connect(self.closeDownloadProcess) # 关闭保存文件对话框
+        self.updateDownloadSignal.connect(self.updateDownloadProcess)  # 更新保存文件进度
+        self.closeDownloadDialogSignal.connect(self.closeDownloadProcess)  # 关闭保存文件对话框
         return
 
     # 数据模拟发生器
@@ -368,7 +436,8 @@ class MainWindow(QMainWindow):
         for p in range(self.SamplesPerChannel):
             for i in range(self.CHANNELCOUNT):
                 # hexStr = hex(random.randint(32000, 33000))
-                hexStr = hex(int(32000 + random.randint(0, 1000) * np.sin(p*2*np.pi/self.SamplesPerChannel + i*2*np.pi/self.CHANNELCOUNT)))
+                hexStr = hex(int(32000 + random.randint(0, 1000) * np.sin(
+                    p * 2 * np.pi / self.SamplesPerChannel + i * 2 * np.pi / self.CHANNELCOUNT)))
                 # print('%s, %s, %s' % (hexStr, hexStr[2:4], hexStr[4:6]))
                 strReceived += '' + hex(i + 1) + ' ' + hexStr[2:4] + ' ' + hexStr[4:6] + ' '
         self.receiveUpdateSignal.emit(strReceived)
@@ -397,7 +466,7 @@ class MainWindow(QMainWindow):
 
     def updateChart(self, vals):
         # print('updateChart')
-        data = np.array(vals) # 24*16
+        data = np.array(vals)  # 24*16
         for i in range(self.CHANNELCOUNT):
             if self.receiveProgressStop:
                 return
@@ -414,20 +483,21 @@ class MainWindow(QMainWindow):
                 try:
                     temp = self.filter(temp)
                     # print('len of temp after fileter = %d' % len(temp))
-                    temp = temp[self.N-1+len(data[i]):]
+                    temp = temp[self.N - 1 + len(data[i]):]
                 except Exception as e:
                     print(e)
 
             self.curves[i].setData(temp)
             if len(temp) > 0:
-                self.__getattribute__("ChannelValueLabel" + str(i + 1)).setText('%.2f' % temp[len(temp) - 1] if temp[len(temp) - 1]>0 else '0')
+                self.__getattribute__("ChannelValueLabel" + str(i + 1)).setText(
+                    '%.2f' % temp[len(temp) - 1] if temp[len(temp) - 1] > 0 else '0')
 
     # 将数据保存到缓存文件
     def cacheRawData(self, vals):
         if self.receiveProgressStop:
             return
 
-        try :
+        try:
             rawData = np.array(vals)
             # print(len(rawData.shape))
             if len(rawData.shape) < 2:
@@ -439,7 +509,7 @@ class MainWindow(QMainWindow):
 
             def myMap(data):
                 if data != '\n':
-                    return ' ' + str(data) # 不是换行符，加空格
+                    return ' ' + str(data)  # 不是换行符，加空格
                 return data
 
             self.cache_save(''.join(map(myMap, stackData)))  # 缓存
@@ -467,7 +537,7 @@ class MainWindow(QMainWindow):
                 self.dataCache.clear()
                 self.fileCache.close()
                 self.rawDataCache.close()
-                self.img.clear() # clear压力区域图
+                self.img.clear()  # clear压力区域图
                 self.offset = None
                 self.timmer.stop()
             else:
@@ -504,7 +574,7 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     self.com.close()
                     self.receiveProgressStop = True
-                    self.errorSignal.emit( parameters.strOpenFailed +"\n"+ str(e))
+                    self.errorSignal.emit(parameters.strOpenFailed + "\n" + str(e))
                     self.serialOpenCloseButton.setDisabled(False)
         except Exception:
             pass
@@ -531,7 +601,7 @@ class MainWindow(QMainWindow):
                 data = data.replace("\n", " ")
             data = self.hexStringB2Hex(data)
             if data == -1:
-                self.errorSignal.emit( parameters.strWriteFormatError)
+                self.errorSignal.emit(parameters.strWriteFormatError)
                 return -1
         else:
             data = data.encode()
@@ -592,7 +662,7 @@ class MainWindow(QMainWindow):
         self.progressDialog.show()
 
         # 启动保存文件线程
-        saveProcess = threading.Thread(target=self.on_saveReceivedData, args=(fileName, ))
+        saveProcess = threading.Thread(target=self.on_saveReceivedData, args=(fileName,))
         saveProcess.setDaemon(True)
         saveProcess.start()
 
@@ -619,12 +689,12 @@ class MainWindow(QMainWindow):
                 if data == -1:
                     return
                 print(self.sendArea.toPlainText())
-                print("send:",data)
+                print("send:", data)
                 self.sendCount += len(data)
                 self.com.write(data)
                 data = self.sendArea.toPlainText()
                 self.sendHistoryFindDelete(data)
-                self.sendHistory.insertItem(0,data)
+                self.sendHistory.insertItem(0, data)
                 self.sendHistory.setCurrentIndex(0)
                 self.receiveUpdateSignal.emit("")
                 # scheduled send
@@ -643,7 +713,7 @@ class MainWindow(QMainWindow):
         while self.sendSettingsScheduledCheckBox.isChecked():
             self.sendData()
             try:
-                time.sleep(int(self.sendSettingsScheduled.text().strip())/1000)
+                time.sleep(int(self.sendSettingsScheduled.text().strip()) / 1000)
             except Exception:
                 self.errorSignal.emit(parameters.strTimeFormatError)
         self.isScheduledSending = False
@@ -654,7 +724,7 @@ class MainWindow(QMainWindow):
         self.rawDataCache = open('rawCache', 'w')
         self.rawDataCache.truncate()
         self.rawDataCache = open('rawCache', 'a')
-        while(not self.receiveProgressStop):
+        while (not self.receiveProgressStop):
             try:
                 length = 3 * self.SamplesPerChannel
                 read_bytes = self.com.read(length)
@@ -667,9 +737,9 @@ class MainWindow(QMainWindow):
                 # print(strReceived)
 
                 if self.rawDataCache is not None and not self.rawDataCache.closed and self.rawDataCache.writable():
-                    self.rawDataCache.write(strReceived) # 写入缓存文件
+                    self.rawDataCache.write(strReceived)  # 写入缓存文件
 
-                self.receiveUpdateSignal.emit(strReceived) # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
+                self.receiveUpdateSignal.emit(strReceived)  # 使用slot机制将接收到的数据发送给updateReceivedDataDisplay
             except Exception as e:
                 print("receiveData error")
                 # if self.com.is_open and not self.serialPortCombobox.isEnabled():
@@ -710,7 +780,7 @@ class MainWindow(QMainWindow):
                 # 将数据缓存在list中
                 temp = str.split(' ')
                 if temp[len(temp) - 1] == '':
-                    temp.pop() # 去掉最后一个为空格的元素
+                    temp.pop()  # 去掉最后一个为空格的元素
                 self.dataCache.extend(temp)
                 # print('str = %s, after split str = %s' % (str, temp))
 
@@ -740,13 +810,13 @@ class MainWindow(QMainWindow):
                     del self.dataCache[0:self.offset]
                 else:
                     if self.timmer.isActive() == False:
-                        self.timmer.setInterval(40) # 40ms更新一次，也就是刷新速度为25Hz
+                        self.timmer.setInterval(40)  # 40ms更新一次，也就是刷新速度为25Hz
                         self.timmer.start()
 
         except Exception as e1:
             print("updateReceivedDataDisplay error: %s" % e1)
 
-        self.statusBarReceiveCount.setText("%s(bytes):%d" %(parameters.strReceive ,self.receiveCount))
+        self.statusBarReceiveCount.setText("%s(bytes):%d" % (parameters.strReceive, self.receiveCount))
         return
 
     def findOffset(self):
@@ -754,7 +824,8 @@ class MainWindow(QMainWindow):
             # print(mIndex)
             tempList = self.dataCache[mIndex:9 + mIndex:3]
             # print(tempList)
-            if len(tempList) > 2 and int(tempList[2], 16) - int(tempList[1], 16) == 1 and int(tempList[1], 16) - int(tempList[0], 16) == 1:
+            if len(tempList) > 2 and int(tempList[2], 16) - int(tempList[1], 16) == 1 and int(tempList[1], 16) - int(
+                    tempList[0], 16) == 1:
                 # print('offset = %d' % mIndex)
                 return mIndex
 
@@ -762,7 +833,7 @@ class MainWindow(QMainWindow):
         if self.receiveProgressStop:
             return
 
-        samples = self.SamplesPerChannel # 每次每个通道更新16个数据点，16 = 400/(1000/40)，其中400指每个通道收到数据点的速度是400pts（串口接收速率）
+        samples = self.SamplesPerChannel  # 每次每个通道更新16个数据点，16 = 400/(1000/40)，其中400指每个通道收到数据点的速度是400pts（串口接收速率）
         if len(self.dataCache) > (3 * samples * self.CHANNELCOUNT):
 
             # self.cache_save(' '.join(self.dataCache[0:3 * samples * self.CHANNELCOUNT]))  # 缓存
@@ -787,7 +858,7 @@ class MainWindow(QMainWindow):
                     del self.dataCache[0:self.offset]
                     continue
 
-                channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768)/4096*1000
+                channelData = (int(''.join(self.dataCache[1:3]), 16) - 32768) / 4096 * 1000
                 # channelData = int(''.join(self.dataCache[1:3]), 16)
                 # toShowData[channelNumber - 1].append(channelData)
 
@@ -797,12 +868,13 @@ class MainWindow(QMainWindow):
 
                 if self.dataBaseline[channelNumber - 1] == 0:
                     self.dataBaseline[channelNumber - 1] = channelData
-                toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
+                toShowData[channelNumber - 1].append(
+                    channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
                 # 降采样 1/4
                 # if i//self.CHANNELCOUNT%8 == 0:
                 #     toShowData[channelNumber - 1].append(channelData - self.dataBaseline[channelNumber - 1])  # toShowData维度：(24, 16)
 
-                rawData[channelNumber - 1].append(channelData) # rowData维度：(24, 16)
+                rawData[channelNumber - 1].append(channelData)  # rowData维度：(24, 16)
                 # print('%s, %s' % (channelNumber, channelData))
                 # print(toShowData)
                 del self.dataCache[0:3]
@@ -818,16 +890,18 @@ class MainWindow(QMainWindow):
                 tempC = np.zeros((self.CHANNELCOUNT, 3))  # 创建临时array，维度(24, 3)
                 # 根据压力值计算颜色，然后将颜色数组[r, g, b]赋值给tempC
                 for i in range(self.CHANNELCOUNT):
-                    tempC[(i % self.AREA_COL)*(self.CHANNELCOUNT//self.AREA_COL)+(i//self.AREA_COL), :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i]/1000)
-                tempD = np.reshape(tempC, (self.AREA_COL, self.CHANNELCOUNT//self.AREA_COL, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
+                    tempC[(i % self.AREA_COL) * (self.CHANNELCOUNT // self.AREA_COL) + (i // self.AREA_COL),
+                    :] = self.blend_color([0, 255, 0], [255, 0, 0], tempB[i] / 1000)
+                tempD = np.reshape(tempC, (
+                    self.AREA_COL, self.CHANNELCOUNT // self.AREA_COL, 3))  # 变形后维度(8, 3, 3)，其中8为每个模块通道数量，第一个3为模块数量
                 self.img.setImage(tempD)  # 更新压力热力图
 
                 elapsed = (time.clock() - start)
                 self.feedFlag = True
-                print("Time used: %.3fs" % elapsed) # TODO 取消注释
+                print("Time used: %.3fs" % elapsed)  # TODO 取消注释
             except Exception as e:
                 print("chart.handleData error: %s" % e)
-            print('剩余数据 %d 字节' % len(self.dataCache)) # TODO 注释
+            print('剩余数据 %d 字节' % len(self.dataCache))  # TODO 注释
 
     def blend_color(self, color1, color2, f):
         [r1, g1, b1] = color1
@@ -838,7 +912,7 @@ class MainWindow(QMainWindow):
         return [r, g, b]
 
     def onSendSettingsHexClicked(self):
-        data = self.sendArea.toPlainText().replace("\n","\r\n")
+        data = self.sendArea.toPlainText().replace("\n", "\r\n")
         data = self.asciiB2HexString(data.encode())
         self.sendArea.clear()
         self.sendArea.insertPlainText(data)
@@ -846,13 +920,13 @@ class MainWindow(QMainWindow):
 
     def onSendSettingsAsciiClicked(self):
         try:
-            data = self.sendArea.toPlainText().replace("\n"," ").strip()
+            data = self.sendArea.toPlainText().replace("\n", " ").strip()
             self.sendArea.clear()
             if data != "":
-                data = self.hexStringB2Hex(data).decode('utf-8','ignore')
+                data = self.hexStringB2Hex(data).decode('utf-8', 'ignore')
                 self.sendArea.insertPlainText(data)
         except Exception as e:
-            QMessageBox.information(self,parameters.strWriteFormatError,parameters.strWriteFormatError)
+            QMessageBox.information(self, parameters.strWriteFormatError, parameters.strWriteFormatError)
         return
 
     def sendHistoryIndexChanged(self):
@@ -861,7 +935,7 @@ class MainWindow(QMainWindow):
         return
 
     def clearReceiveBuffer(self):
-        self.dataCache.clear() # 清空数据缓存list
+        self.dataCache.clear()  # 清空数据缓存list
         self.offset = None
         # self.receiveArea.clear()
         self.receiveCount = 0
@@ -878,7 +952,7 @@ class MainWindow(QMainWindow):
         self.move(qr.topLeft())
         return
 
-    def errorHint(self,str):
+    def errorHint(self, str):
         QMessageBox.information(self, str, str)
         return
 
@@ -919,11 +993,11 @@ class MainWindow(QMainWindow):
 
     def detectSerialPortProcess(self):
         self.serialPortCombobox.clear()
-        while(1):
+        while (1):
             portList = self.findSerialPort();
             for i in portList:
-                self.serialPortCombobox.addItem(str(i[0])+" "+str(i[1]))
-            if len(portList)>0:
+                self.serialPortCombobox.addItem(str(i[0]) + " " + str(i[1]))
+            if len(portList) > 0:
                 self.serialPortCombobox.setCurrentIndex(0)
                 self.serialPortCombobox.setToolTip(str(portList[0]))
                 break
@@ -931,7 +1005,7 @@ class MainWindow(QMainWindow):
         self.isDetectSerialPort = False
         return
 
-    def sendHistoryFindDelete(self,str):
+    def sendHistoryFindDelete(self, str):
         self.sendHistory.removeItem(self.sendHistory.findText(str))
         return
 
@@ -939,11 +1013,11 @@ class MainWindow(QMainWindow):
         print("test")
         return
 
-    def asciiB2HexString(self,strB):
+    def asciiB2HexString(self, strB):
         strHex = binascii.b2a_hex(strB).upper()
-        return re.sub(r"(?<=\w)(?=(?:\w\w)+$)", " ", strHex.decode())+" "
+        return re.sub(r"(?<=\w)(?=(?:\w\w)+$)", " ", strHex.decode()) + " "
 
-    def hexStringB2Hex(self,hexString):
+    def hexStringB2Hex(self, hexString):
         dataList = hexString.split(" ")
         j = 0
         for i in dataList:
@@ -985,10 +1059,10 @@ class MainWindow(QMainWindow):
         # paramObj.sendHistoryList.clear()
         # for i in range(0,self.sendHistory.count()):
         #     paramObj.sendHistoryList.append(self.sendHistory.itemText(i))
-        f = open("settings.config","wb")
+        f = open("settings.config", "wb")
         f.truncate()
         pickle.dump(paramObj, f)
-        pickle.dump(paramObj.sendHistoryList,f)
+        pickle.dump(paramObj.sendHistoryList, f)
         f.close()
         return
 
@@ -996,7 +1070,7 @@ class MainWindow(QMainWindow):
         paramObj = parameters.ParametersToSave()
         try:
             f = open("settings.config", "rb")
-            paramObj = pickle.load( f)
+            paramObj = pickle.load(f)
             paramObj.sendHistoryList = pickle.load(f)
             f.close()
         except Exception as e:
@@ -1012,7 +1086,7 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Control:
             self.keyControlPressed = True
-        elif event.key() == Qt.Key_Return or event.key()==Qt.Key_Enter:
+        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             if self.keyControlPressed:
                 self.sendData()
         elif event.key() == Qt.Key_L:
@@ -1023,7 +1097,7 @@ class MainWindow(QMainWindow):
         #         self.receiveArea.clear()
         return
 
-    def keyReleaseEvent(self,event):
+    def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
             self.keyControlPressed = False
         return
@@ -1035,7 +1109,8 @@ class MainWindow(QMainWindow):
 
     def functionSetAllChannel(self):
         for channelNum in range(self.CHANNELCOUNT):
-            self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(self.ChannelCheckBoxAll.isChecked())
+            self.__getattribute__("ChannelCheckBox" + str(channelNum + 1)).setChecked(
+                self.ChannelCheckBoxAll.isChecked())
 
     def functionSetVisible(self):
         for channelNum in range(self.CHANNELCOUNT):
@@ -1061,7 +1136,7 @@ class MainWindow(QMainWindow):
     def showSettings(self):
         self.settingWidget.show()
         self.settingsButton.setStyleSheet(
-            parameters.strStyleShowHideButtonLeft.replace("$DataPath",self.DataPath))
+            parameters.strStyleShowHideButtonLeft.replace("$DataPath", self.DataPath))
         return;
 
     def hideSettings(self):
@@ -1082,7 +1157,7 @@ class MainWindow(QMainWindow):
     def showFunctional(self):
         self.functionalWiget.show()
         self.functionalButton.setStyleSheet(
-            parameters.strStyleShowHideButtonRight.replace("$DataPath",self.DataPath))
+            parameters.strStyleShowHideButtonRight.replace("$DataPath", self.DataPath))
         return;
 
     def hideFunctional(self):
@@ -1092,20 +1167,21 @@ class MainWindow(QMainWindow):
         return;
 
     def skinChange(self):
-        if self.param.skin == 1: # light
+        if self.param.skin == 1:  # light
             file = open(self.DataPath + '/assets/qss/style-dark.qss', "r")
             self.param.skin = 2
-        else: # elif self.param.skin == 2: # dark
+        else:  # elif self.param.skin == 2: # dark
             file = open(self.DataPath + '/assets/qss/style.qss', "r")
             self.param.skin = 1
         self.app.setStyleSheet(file.read().replace("$DataPath", self.DataPath))
         return
 
     def showAbout(self):
-        QMessageBox.information(self, "About","<h1 style='color:#f75a5a';margin=10px;>"+parameters.appName+
-                                '</h1><br><b style="color:#08c7a1;margin = 5px;">V'+str(helpAbout.versionMajor)+"."+
-                                str(helpAbout.versionMinor)+"."+str(helpAbout.versionDev)+
-                                "</b><br><br>"+helpAbout.date+"<br><br>"+helpAbout.strAbout())
+        QMessageBox.information(self, "About", "<h1 style='color:#f75a5a';margin=10px;>" + parameters.appName +
+                                '</h1><br><b style="color:#08c7a1;margin = 5px;">V' + str(
+            helpAbout.versionMajor) + "." +
+                                str(helpAbout.versionMinor) + "." + str(helpAbout.versionDev) +
+                                "</b><br><br>" + helpAbout.date + "<br><br>" + helpAbout.strAbout())
         return
 
     def autoUpdateDetect(self):
@@ -1149,22 +1225,29 @@ class MainWindow(QMainWindow):
 
         return filtered_x
 
+
+def readFile(mainWindow):
+    print("data path:" + mainWindow.DataPath)
+    if (mainWindow.param.skin == 1):  # light skin
+        file = open(mainWindow.DataPath + '/assets/qss/style.qss', "r")
+    else:  # elif mainWindow.param == 2: # dark skin
+        file = open(mainWindow.DataPath + '/assets/qss/style-dark.qss', "r")
+    qss = file.read().replace("$DataPath", mainWindow.DataPath)
+    return qss
+
+
 def main():
     app = QApplication(sys.argv)
     mainWindow = MainWindow(app)
-    print("data path:"+mainWindow.DataPath)
-    if(mainWindow.param.skin == 1) :# light skin
-        file = open(mainWindow.DataPath+'/assets/qss/style.qss',"r")
-    else: #elif mainWindow.param == 2: # dark skin
-        file = open(mainWindow.DataPath + '/assets/qss/style-dark.qss', "r")
-    qss = file.read().replace("$DataPath",mainWindow.DataPath)
-    app.setStyleSheet(qss)
-    mainWindow.detectSerialPort()
-    t = threading.Thread(target=mainWindow.autoUpdateDetect)
-    t.setDaemon(True)
-    t.start()
+    if mainWindow.sensor == mainWindow.sensors["serial"]:
+        qss = readFile(mainWindow)
+        app.setStyleSheet(qss)
+        mainWindow.detectSerialPort()
+        t = threading.Thread(target=mainWindow.autoUpdateDetect)
+        t.setDaemon(True)
+        t.start()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()
-

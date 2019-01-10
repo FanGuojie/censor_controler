@@ -2,7 +2,9 @@ __pycache__
 .vscode
 .idea
 *.config
-
+.DS_Store
+SensorTool/.DS_Store
+SensorToolData/.DS_Store
 bin
 dist
 build

@@ -5,15 +5,16 @@ import re
 import sys
 import threading
 import time
-
+import multiprocessing as mp
 import numpy as np
 import pyqtgraph as pg
 # from PyQt5 import QtWidgets
+import cv2
 import serial
 import serial.threaded
 import serial.tools.list_ports
 from PyQt5.QtCore import pyqtSignal, Qt, QTimer
-from PyQt5.QtGui import QIcon, QFont, QPixmap
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QImage, QPainter
 from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton, QMessageBox, QDesktopWidget, QMainWindow,
                              QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QCheckBox, QLineEdit, QGroupBox, QSplitter,
                              QFileDialog, QProgressDialog, QRadioButton)
@@ -27,7 +28,17 @@ except ImportError:
     import pickle
 if sys.platform == "win32":
     import ctypes
-from scipy.signal import kaiserord, lfilter, firwin
+
+
+# import torch
+resSort=mp.Value('d',-1)
+def mp_camera():
+    from measure import cameraTest
+    while (True):
+        resSort.value = int(cameraTest())
+
+        print(int(resSort.value))
+        # q.put(sort)
 
 
 class MainWindow(QMainWindow):
@@ -127,8 +138,8 @@ class MainWindow(QMainWindow):
         l2 = QLabel("copyright by 类脑计算与认知团队")
         l1.setAlignment(Qt.AlignCenter)
         l2.setAlignment(Qt.AlignCenter)
-        l1.setFont(QFont("Comic Sans MS",20,QFont.Bold))
-        l2.setFont(QFont("Roman times",10,QFont.Bold))
+        l1.setFont(QFont("Comic Sans MS", 20, QFont.Bold))
+        l2.setFont(QFont("Roman times", 10, QFont.Bold))
         v_box = QVBoxLayout()
         v_box.addWidget(l1)
         v_box.addWidget(l2)
@@ -140,11 +151,59 @@ class MainWindow(QMainWindow):
         self.initEvent()
 
     def init_cameraCensor(self):
+        # from sort.classify_pytorch import initNet, guitest
+        self.camera = mp.Process(target=mp_camera)
+        self.camera.start()
         self.cameraCensorWidget = QWidget()
-        self.cameraCensorWidget.setWindowTitle("Hello!")
-        self.cameraCensorWidget.setGeometry(100, 100, 1000, 1000)
-        l = QLabel(self.cameraCensorWidget)
-        l.setText("camera")
+        self.cameraCensorWidget.setGeometry(50, 50, 500, 500)
+
+        # self.timer_camera = QTimer()
+        # self.__layout_data_show = QVBoxLayout()
+        layout_main = QVBoxLayout()
+        info = QLabel("说明：在摄像头窗口中输入 s 进行对当前图像到分类识别")
+        info.setFont(QFont("Roman times", 8,QFont.Bold))
+        layout_sort = QHBoxLayout()
+        layout_color=QHBoxLayout()
+        # 按键手动更新
+        btn_sort= QPushButton(u'刷新类别')
+        btn_color = QPushButton(u'刷新颜色')
+        btn_sort.setFont(QFont("Roman times", 10, QFont.Bold))
+        btn_color.setFont(QFont("Roman times", 10, QFont.Bold))
+        # btn_sort.setMinimumHeight(50)
+        # btn_color.setMinimumHeight(50)
+        btn_sort.clicked.connect(self.sort_show)
+        self.sort = QLabel("待测类别")
+        self.color = QLabel("待测颜色")
+        self.sort.setFont(QFont("Roman times", 10, QFont.Bold))
+        self.color.setFont(QFont("Roman times", 10, QFont.Bold))
+        # 自动更新
+        #在类中定义一个定时器,并在构造函数中设置启动及其信号和槽
+        self.timer = QTimer(self)
+        self.timer.start(300)
+        self.timer.timeout.connect(self.sort_show)
+
+        # 布局设置
+        layout_sort.addStretch(1)
+        layout_sort.addWidget(btn_sort)
+        layout_sort.addWidget(self.sort)
+        layout_sort.addStretch(8)
+        layout_color.addStretch(1)
+        layout_color.addWidget(btn_color)
+        layout_color.addWidget(self.color)
+        layout_color.addStretch(8)
+        layout_main.addWidget(info)
+        layout_main.addLayout(layout_sort)
+        layout_main.addLayout(layout_color)
+        layout_main.addStretch(1)
+        self.cameraCensorWidget.setLayout(layout_main)
+        # cameraTest()
+        # show = cv2.cvtColor(show, cv2.COLOR_BGR2RGB)
+        # showImage = QImage(show.data, show.shape[1], show.shape[0], QImage.Format_RGB888)
+        # self.label_show_camera.setPixmap(QPixmap.fromImage(showImage))
+
+    def sort_show(self):
+        if resSort.value!=-1:
+            self.sort.setText("这是第 "+str(int(resSort.value))+" 类")
 
     def __del__(self):
         return
@@ -458,11 +517,11 @@ class MainWindow(QMainWindow):
             # self.texts.append(text)
 
             self.curves.append(curve)
-        # 曲线数据初始化
-        # data = np.random.normal(size=(self.CHANNELCOUNT, 400))  # TODO 删除
-        # for i in range(self.CHANNELCOUNT):
-        #     temp = (i) % data.shape[0]
-        #     self.curves[i].setData(data[temp])
+            # 曲线数据初始化
+            # data = np.random.normal(size=(self.CHANNELCOUNT, 400))  # TODO 删除
+            # for i in range(self.CHANNELCOUNT):
+            #     temp = (i) % data.shape[0]
+            #     self.curves[i].setData(data[temp])
 
     def updateChart(self, vals):
         # print('updateChart')
@@ -747,7 +806,7 @@ class MainWindow(QMainWindow):
                 #     self.serialPortCombobox.clear()
                 #     self.detectSerialPort()
                 print(e)
-            # time.sleep(0.001)  # windows不注释会导致程序卡死
+                # time.sleep(0.001)  # windows不注释会导致程序卡死
         return
 
     def onReceiveTimerOut(self):
@@ -964,6 +1023,7 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             self.com.close()
             self.timmer.stop()
+            self.camera.terminate()
             # self.uartReceiveTimer.stop()
             try:
                 if self.fileCache is not None:
@@ -1001,7 +1061,7 @@ class MainWindow(QMainWindow):
                 self.serialPortCombobox.setCurrentIndex(0)
                 self.serialPortCombobox.setToolTip(str(portList[0]))
                 break
-            # time.sleep(1)
+                # time.sleep(1)
         self.isDetectSerialPort = False
         return
 
@@ -1193,6 +1253,9 @@ class MainWindow(QMainWindow):
         os.system('start devmgmt.msc')
 
     def filter(self, x):
+        # TODO: 此处可能有冲突
+        from scipy.signal import kaiserord, lfilter, firwin
+
         sample_rate = 512  # TODO
 
         # The Nyquist rate of the signal.
@@ -1224,6 +1287,9 @@ class MainWindow(QMainWindow):
         delay = 0.5 * (N - 1) / sample_rate
 
         return filtered_x
+
+
+PYTHON_VERSION = sys.version_info[0]
 
 
 def readFile(mainWindow):
